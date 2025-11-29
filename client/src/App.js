@@ -25,7 +25,7 @@ function App() {
   const fetchBooks = useCallback(async (searchQuery, pageNum) => {
     setLoading(true);
     try {
-      const res = await axios.get(`http://localhost:5000/api/books`, {
+      const res = await axios.get(`http://localhost:5001/api/books`, {
         params: { search: searchQuery, page: pageNum, limit: 18 }
       });
       setBooks(res.data.data);

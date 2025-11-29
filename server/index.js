@@ -4,7 +4,7 @@ const { loadLibraryData } = require('./src/models/libraryModel');
 const { searchBooks } = require('./src/controllers/bookController');
 
 const app = express();
-const PORT = 5000;
+const PORT = 5001;
 
 app.use(cors());
 app.use(express.json());
@@ -12,9 +12,30 @@ app.use(express.json());
 // Routes
 app.get('/api/books', searchBooks);
 
-// Start server and pre-load data
-app.listen(PORT, async () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-    console.log("Initializing Library System...");
-    await loadLibraryData();
-});
+// Start server with Error Handling
+const startServer = async () => {
+    try {
+        console.log("Initializing Library System...");
+        // Load data BEFORE listening to avoid race conditions
+        await loadLibraryData(); 
+        
+        const server = app.listen(PORT, () => {
+            console.log(`Server running on http://localhost:${PORT}`);
+        });
+
+        // Handle Port Conflicts
+        server.on('error', (e) => {
+            if (e.code === 'EADDRINUSE') {
+                console.error(`❌ Port ${PORT} is already in use!`);
+                console.error(`Try running: npx kill-port ${PORT}`);
+            } else {
+                console.error("❌ Server Error:", e);
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Failed to start server:", error);
+    }
+};
+
+startServer();
