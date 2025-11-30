@@ -1,42 +1,33 @@
 const mongoose = require('mongoose');
 
 const bookSchema = new mongoose.Schema({
-  title: { type: String, required: true, index: true },
-  subtitle: String,
-  authors: [String],
-  isbn: { type: String, index: true },
-  description: String,
-  categories: [String],
-  tags: [String], // Rich tags
+  title: { type: String, required: true },
+  
+  // PRIMARY FIELDS (Used by Frontend)
+  author: { type: String, index: true },   // Singular (for search/display)
+  location: { type: String, index: true }, // Singular (for shelf parsing)
+  status: String,
+  
+  // RICH METADATA (Used by Detail View)
+  authors: [String],        // Plural (all authors)
   publisher: String,
-  publishedDate: String,
-  pageCount: Number,
-  language: String,
-  averageRating: Number,
-  ratingsCount: Number,
+  description: String,
+  tags: [String],
   coverImage: String,
-  previewLink: String,
   
-  // Inventory Management
+  // INVENTORY DATA
+  locations: [String],      // All copies found
   count: { type: Number, default: 1 },
-  locations: [String], // Changed from 'location: String' to Array
+  callNumber: String,
   
-  status: { type: String, default: 'Available' },
+  // ENGINE METADATA
   meta: {
-    source: String,
-    originalId: String,
-    importedAt: { type: Date, default: Date.now }
+    source: String,     // 'Google', 'OpenLib', 'Local'
+    originalId: String
   }
-});
+}, { timestamps: true });
 
-// Super Search Index
-bookSchema.index({ 
-  title: 'text', 
-  tags: 'text', 
-  description: 'text', 
-  authors: 'text' 
-}, {
-  weights: { title: 10, tags: 8, authors: 5, description: 1 }
-});
+// Enable text search on key fields
+bookSchema.index({ title: 'text', author: 'text', tags: 'text' });
 
 module.exports = mongoose.model('Book', bookSchema);
