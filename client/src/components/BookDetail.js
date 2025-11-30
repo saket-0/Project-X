@@ -75,23 +75,22 @@ const BookDetail = ({ bookGroup, onBack }) => {
                <StatusBadge status={variant.Status} />
             </div>
             
-            {/* Bottom Row: Location & Type 
-                FIX: 
-                1. grid-cols-[2fr_1fr] gives Location 66% width
-                2. gap-2 reduces whitespace between columns
-                3. min-w-0 ensures truncation works properly if text is still too long
+            {/* Bottom Row: SMART FLEX LAYOUT
+              - Changed from 'grid' to 'flex'
+              - 'flex-1' on Location makes it greedy (takes all space)
+              - 'shrink-0' on Type makes it compact (takes only needed space)
             */}
-            <div className="grid grid-cols-[2fr_1fr] gap-2 pt-2 border-t border-gray-100">
-               <div className="min-w-0">
+            <div className="flex gap-4 pt-2 border-t border-gray-100">
+               <div className="flex-1 min-w-0">
                  <div className="text-[10px] text-gray-400 mb-0.5">Shelf Location</div>
                  <div className="text-sm text-gray-700 flex items-center gap-1">
                    <MapPin className="w-3 h-3 text-gray-400 shrink-0" /> 
                    <span className="truncate">{variant.Shelf || 'N/A'}</span>
                  </div>
                </div>
-               <div className="min-w-0">
-                 <div className="text-[10px] text-gray-400 mb-0.5">Type</div>
-                 <div className="text-sm text-gray-700 truncate">{variant.Type || 'Standard'}</div>
+               <div className="shrink-0">
+                 <div className="text-[10px] text-gray-400 mb-0.5 text-right">Type</div>
+                 <div className="text-sm text-gray-700">{variant.Type || 'Standard'}</div>
                </div>
             </div>
           </div>
