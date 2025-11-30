@@ -1,5 +1,4 @@
 const natural = require('natural');
-// Ensure you have created this file as discussed
 const ddcMap = require('../../utils/classificationMap'); 
 const config = require('../config');
 
@@ -16,35 +15,41 @@ const generateTags = (book, meta) => {
     const finalTags = new Set();
     
     // --- 1. DDC CALL NUMBER DECODING ---
-    // Extract the first 3 digits from call numbers (e.g., "624.1" -> "624")
-    const callNumbers = Array.from(book.locations || []);
-    
-    callNumbers.forEach(loc => {
-        // Regex matches any 3-digit sequence at the start or after a separator
-        const matches = loc.match(/(?:^|\s|\.)(\d{3})/g); 
-        
-        if (matches) {
-            matches.forEach(m => {
-                const code = m.trim().replace('.', '');
-                
-                // A. Exact Match (e.g., 624 -> Civil Engineering)
-                if (ddcMap[code]) {
-                    ddcMap[code].forEach(t => finalTags.add(t));
-                }
+    // FIX: We now look at 'callNumber' first, then fallback to 'locations'
+    const potentialSources = [
+        book.callNumber,     // Primary Source: "624.1 S34"
+        ...(book.locations || []) // Fallback: Sometimes CallNo is put in Shelf col by mistake
+    ].filter(Boolean);
 
-                // B. Broader Match (e.g., 624 -> 620 -> Engineering)
-                // This ensures that if '624' isn't mapped, we still get 'Engineering' from '620'
-                const broadCode = code.substring(0, 2) + '0';
-                if (ddcMap[broadCode]) {
-                    ddcMap[broadCode].forEach(t => finalTags.add(t));
+    // Regex to find the DDC Code (e.g. 624 from "624.1")
+    // Matches 3 digits at start of string or after a space/bracket
+    const ddcRegex = /(?:^|\s|\[)(\d{3})(?:\.|\s|$)/;
+
+    potentialSources.forEach(source => {
+        const match = source.match(ddcRegex);
+        
+        if (match) {
+            const code = match[1]; // e.g., "624"
+            
+            // Helper to safely add tags
+            const addTags = (lookupCode) => {
+                if (ddcMap[lookupCode]) {
+                    ddcMap[lookupCode].forEach(t => finalTags.add(t));
                 }
-                
-                // C. Top Level Match (e.g., 624 -> 600 -> Technology)
-                const topCode = code[0] + '00';
-                if (ddcMap[topCode]) {
-                    ddcMap[topCode].forEach(t => finalTags.add(t));
-                }
-            });
+            };
+
+            // A. Exact Match (e.g., 624 -> Civil Engineering)
+            addTags(code);
+
+            // B. Broader Match (e.g., 624 -> 620 -> Engineering)
+            // Replaces last digit with 0
+            const broadCode = code.substring(0, 2) + '0';
+            addTags(broadCode);
+            
+            // C. Top Level Match (e.g., 624 -> 600 -> Technology)
+            // Replaces last two digits with 00
+            const topCode = code[0] + '00';
+            addTags(topCode);
         }
     });
 
@@ -56,7 +61,7 @@ const generateTags = (book, meta) => {
     explicitTags.forEach(t => finalTags.add(t));
 
     // --- 3. NLP: MINING THE DESCRIPTION ---
-    // CRITICAL FIX: We ONLY analyze the description. We DO NOT include the title here.
+    // We analyze the description to find frequent keywords
     const textToAnalyze = meta.description || ''; 
 
     // Only run NLP if we have a substantial description
@@ -72,10 +77,10 @@ const generateTags = (book, meta) => {
             }
         });
 
-        // Take top 8 most frequent keywords
+        // Take top 6 most frequent keywords
         Object.entries(wordFreq)
             .sort(([,a], [,b]) => b - a)
-            .slice(0, 8)
+            .slice(0, 6)
             .forEach(([word]) => {
                 // Capitalize first letter (Title Case)
                 finalTags.add(word.charAt(0).toUpperCase() + word.slice(1));
@@ -84,9 +89,8 @@ const generateTags = (book, meta) => {
 
     // --- 4. THE REDUNDANCY FILTER ---
     // Remove any tag that is already a word in the Book Title.
-    // Example: If Title is "Advanced Java Programming", remove tags "Java" and "Programming".
     const titleWords = new Set(
-        book.rawTitle.toLowerCase().split(/[\s\-_:;,]+/) // Split title into words
+        book.rawTitle.toLowerCase().split(/[\s\-_:;,]+/) 
     );
 
     return Array.from(finalTags).filter(tag => {
@@ -96,7 +100,6 @@ const generateTags = (book, meta) => {
         if (titleWords.has(tagLower)) return false;
 
         // Check 2: Is the tag contained inside the title as a phrase?
-        // (e.g. Title: "Introduction to Civil Engineering", Tag: "Civil Engineering") -> Remove
         if (book.rawTitle.toLowerCase().includes(tagLower)) return false;
 
         return true; 

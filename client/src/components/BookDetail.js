@@ -1,5 +1,6 @@
 import React from 'react';
-import { ArrowLeft, MapPin, CheckCircle, XCircle, BookOpen } from 'lucide-react';
+// Added 'Tag' to the imports for the icon
+import { ArrowLeft, MapPin, CheckCircle, XCircle, BookOpen, Tag } from 'lucide-react';
 
 const BookDetail = ({ book, onBack }) => {
   if (!book) return null;
@@ -20,10 +21,12 @@ const BookDetail = ({ book, onBack }) => {
           <div className="p-2.5 md:p-4 bg-blue-100 rounded-lg text-blue-600 w-fit">
             <BookOpen className="w-6 h-6 md:w-10 md:h-10" />
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="text-xl md:text-3xl font-bold text-gray-900 mb-1 leading-snug">{book.title}</h1>
             <p className="text-base md:text-xl text-gray-600 mb-3">{book.author}</p>
-            <div className="flex flex-wrap gap-2 text-xs md:text-sm text-gray-500">
+            
+            {/* Metadata Row */}
+            <div className="flex flex-wrap gap-2 text-xs md:text-sm text-gray-500 mb-4">
                <span className="bg-gray-50 px-2.5 py-1 rounded-full border border-gray-100">
                  Publisher: {book.publisher || 'N/A'}
                </span>
@@ -31,6 +34,27 @@ const BookDetail = ({ book, onBack }) => {
                  Total Copies: {book.totalCopies}
                </span>
             </div>
+
+            {/* --- NEW: Tags Section --- */}
+            {book.tags && book.tags.length > 0 && (
+              <div className="pt-4 border-t border-gray-100 flex items-start gap-3">
+                <div className="mt-1">
+                  <Tag className="w-4 h-4 text-gray-400" />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {book.tags.map((tag, idx) => (
+                    <span 
+                      key={idx} 
+                      className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* ------------------------- */}
+
           </div>
         </div>
       </div>
@@ -57,7 +81,6 @@ const BookDetail = ({ book, onBack }) => {
                     <MapPin className="w-3 h-3 text-gray-400" />
                     {variant.shelf || variant.location || 'N/A'}
                   </td>
-                  {/* Mapping 'accessionType' to the Type column */}
                   <td className="px-6 py-4 text-gray-600">{variant.accessionType || 'Standard'}</td>
                   <td className="px-6 py-4">
                      <StatusBadge status={variant.status} />
@@ -73,7 +96,6 @@ const BookDetail = ({ book, onBack }) => {
       <div className="md:hidden space-y-3">
         {book.variants && book.variants.map((variant, idx) => (
           <div key={idx} className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-3">
-            {/* Top Row: Call Number & Status */}
             <div className="flex justify-between items-start">
                <div>
                   <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Call Number</div>
@@ -82,7 +104,6 @@ const BookDetail = ({ book, onBack }) => {
                <StatusBadge status={variant.status} />
             </div>
             
-            {/* Bottom Row: SMART FLEX LAYOUT */}
             <div className="flex gap-4 pt-2 border-t border-gray-100">
                <div className="flex-1 min-w-0">
                  <div className="text-[10px] text-gray-400 mb-0.5">Shelf Location</div>
