@@ -1,7 +1,7 @@
 /**
  * server/src/controllers/bookController.js
  * ROBUST ENGINE: Handles Search, Filtering, and Facet Generation
- * FIXED: Handles 'Unknown' locations and matches new Shelf Utils
+ * FIXED: 'Cross-Reactivity' - Authors/Pubs now react to Location filters
  */
 const Book = require('../models/Book');
 const { parseShelf } = require('../utils/shelfUtils'); 
@@ -49,26 +49,44 @@ const searchBooks = async (req, res) => {
         if (filterPubs.length > 0) query.publisher = { $in: filterPubs };
 
         // --- 2. FETCH ALL MATCHING DOCUMENTS (Lightweight) ---
-        // We fetch ALL matches (not just page 1) to build accurate Facets.
-        // We explicitly fetch 'location', 'shelf', and 'callNumber' to ensure parsing works.
         const allMatches = await Book.find(query)
             .select('title author publisher status location shelf callNumber tags coverImage')
             .lean();
 
         // --- 3. PROCESS & PARSE LOCATIONS ---
         const processedBooks = allMatches.map(book => {
-            // Robust Fallback: Try 'location' -> 'Shelf' -> 'callNumber'
-            // This grabs the raw string like "IIF-R10-C2"
             const rawLoc = book.location || book.Shelf || book.shelf || book.callNumber || 'N/A';
             return {
                 ...book,
-                // Attach the parsed object (floor: "2nd Floor", rack: 10, etc.)
                 parsedLocation: parseShelf(rawLoc)
             };
         });
 
+        // --- PREPARE LOCATION FILTERS (MOVED UP) ---
+        // We define the location matching logic here so we can use it during Facet Generation
+        const selectedFloors = toArray(floors);
+        const selectedRacks = toArray(racks); 
+        const selectedCols = toArray(cols);
+
+        const isLocationMatch = (book) => {
+            // If no location filters are active, everything matches
+            if (selectedFloors.length === 0 && selectedRacks.length === 0 && selectedCols.length === 0) return true;
+            
+            if (!book.parsedLocation) return false;
+
+            // Check Floor
+            if (selectedFloors.length > 0 && !selectedFloors.includes(book.parsedLocation.floor)) return false;
+            
+            // Check Rack
+            if (selectedRacks.length > 0 && !selectedRacks.includes(String(book.parsedLocation.rack))) return false;
+
+            // Check Col (if needed)
+            if (selectedCols.length > 0 && !selectedCols.includes(String(book.parsedLocation.col))) return false;
+
+            return true;
+        };
+
         // --- 4. CALCULATE FACETS (Dynamic Filter Options) ---
-        // This generates the options for the sidebar based on the Search Results
         const facets = {
             authors: new Set(),
             pubs: new Set(),
@@ -78,12 +96,20 @@ const searchBooks = async (req, res) => {
         };
 
         processedBooks.forEach(b => {
-            if (b.author) facets.authors.add(b.author);
-            if (b.publisher) facets.pubs.add(b.publisher);
+            // --- FIX START: REACTIVITY ---
+            // Only add Authors and Publishers if the book MATCHES the selected Location.
+            // This ensures if you select "Floor 2", you only see Authors on Floor 2.
+            if (isLocationMatch(b)) {
+                if (b.author) facets.authors.add(b.author);
+                if (b.publisher) facets.pubs.add(b.publisher);
+            }
+            // --- FIX END ---
 
-            // --- FILTER LOGIC CLEANUP ---
-            // Only add location facets if it's a valid, known floor.
-            // This removes "Unknown" and "N/A" from your Sidebar.
+            // For Locations (Floors/Racks), we generally want to see all options 
+            // available within the current Author/Pub search (which is already filtered by DB query).
+            // We do NOT restrict this by `isLocationMatch` because we want to see siblings
+            // (e.g. if I select Floor 2, I still want to see Floor 1 in the list).
+            // Note: The frontend "Sticky Facets" will handle the visual selection state.
             if (b.parsedLocation && 
                 b.parsedLocation.floor !== 'N/A' && 
                 b.parsedLocation.floor !== 'Unknown') {
@@ -95,25 +121,7 @@ const searchBooks = async (req, res) => {
         });
 
         // --- 5. APPLY LOCATION FILTERS (The "Side Filter" Logic) ---
-        const selectedFloors = toArray(floors);
-        const selectedRacks = toArray(racks); 
-        const selectedCols = toArray(cols);
-
-        const filteredBooks = processedBooks.filter(book => {
-            // If no location filters are set, keep everything
-            if (selectedFloors.length === 0 && selectedRacks.length === 0 && selectedCols.length === 0) return true;
-
-            // If filters are set but book has no location, drop it
-            if (!book.parsedLocation) return false;
-
-            // Check Floor (Matches "1st Floor", "2nd Floor", etc.)
-            if (selectedFloors.length > 0 && !selectedFloors.includes(book.parsedLocation.floor)) return false;
-            
-            // Check Rack (Compare as String to be safe)
-            if (selectedRacks.length > 0 && !selectedRacks.includes(String(book.parsedLocation.rack))) return false;
-
-            return true;
-        });
+        const filteredBooks = processedBooks.filter(book => isLocationMatch(book));
 
         // --- 6. PAGINATION ---
         const totalResults = filteredBooks.length;
@@ -134,7 +142,6 @@ const searchBooks = async (req, res) => {
                 authors: Array.from(facets.authors).sort(),
                 pubs: Array.from(facets.pubs).sort(),
                 floors: Array.from(facets.floors).sort(),
-                // Filter out the '999' fallback racks so they don't show up in filters
                 racks: Array.from(facets.racks).filter(r => r !== 999).sort((a, b) => a - b),
                 cols: Array.from(facets.cols).filter(c => c !== 999).sort((a, b) => a - b)
             },

@@ -68,8 +68,26 @@ function App() {
       
       setBooks(res.data.data || []);
       
+      // --- FIX APPLIED HERE ---
+      // We implement "Sticky Facets": If a filter category is active, we ignore 
+      // the narrowed list from the server and keep the previous full list.
       if (res.data.facets) {
-          setFacets(res.data.facets);
+          setFacets(prevFacets => {
+            const nextFacets = { ...res.data.facets };
+
+            // Fix for Authors
+            if (filters.authors.length > 0) nextFacets.authors = prevFacets.authors;
+            
+            // Fix for Publications (pubs)
+            if (filters.pubs.length > 0) nextFacets.pubs = prevFacets.pubs;
+            
+            // Fix for Location filters (Floors, Racks, Cols)
+            if (filters.floors.length > 0) nextFacets.floors = prevFacets.floors;
+            if (filters.racks.length > 0) nextFacets.racks = prevFacets.racks;
+            if (filters.cols.length > 0) nextFacets.cols = prevFacets.cols;
+
+            return nextFacets;
+          });
       }
       
       setTotalPages(res.data.meta.totalPages || 0);
