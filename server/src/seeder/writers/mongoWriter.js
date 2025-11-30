@@ -1,38 +1,35 @@
+/**
+ * server/src/seeder/writers/mongoWriter.js
+ */
 const Book = require('../../models/Book');
 
 const writeBatch = async (processedBooks) => {
     const ops = processedBooks.map(b => {
-        // Compatibility: Pick the first location as the "Main" location for the frontend
-        const primaryLocation = b.locations.size > 0 
-            ? Array.from(b.locations)[0] 
-            : 'N/A';
+        
+        // Logic to determine the best location string
+        // If 'shelf' exists (e.g., "IIF-R3-C4-D"), use it. Otherwise fallback.
+        const finalLocation = b.shelf || b.location || 'N/A';
 
         return {
             updateOne: {
-                filter: { title: b.rawTitle, authors: b.rawAuthor },
+                // Filter by Title and Author to avoid duplicates
+                filter: { title: b.title, author: b.author },
                 update: {
                     $set: {
-                        title: b.metaData.title || b.rawTitle,
-                        // Ensure "author" is a string for the frontend
-                        author: b.metaData.authors?.[0] || b.rawAuthor,
-                        authors: b.metaData.authors || [b.rawAuthor], 
-                        description: b.metaData.description || 'No description available.',
-                        tags: b.tags,
-                        publisher: b.metaData.publisher || '',
-                        coverImage: b.metaData.imageLinks?.thumbnail || '',
-                        status: 'Available', 
-                        
-                        // CRITICAL: Save the primary location for shelfUtils parsing
-                        location: primaryLocation
+                        title: b.title,
+                        author: b.author, // This matches the Schema and Mapper now
+                        publisher: b.publisher,
+                        accessionType: b.accessionType,
+                        callNumber: b.callNumber,
+                        status: b.status,
+                        tags: b.tags || [],
+                        coverImage: '', // CSV usually doesn't have images
+                        description: b.description,
+                        location: finalLocation, // Save the rack/shelf location
+                        isbn: b.isbn
                     },
-                    $addToSet: { locations: { $each: Array.from(b.locations) } },
-                    $inc: { count: b.locations.size },
-                    $setOnInsert: {
-                        meta: { 
-                            source: b.source, 
-                            originalId: b.originalId 
-                        }
-                    }
+                    // If using 'count' logic (optional):
+                    // $inc: { count: 1 } 
                 },
                 upsert: true
             }

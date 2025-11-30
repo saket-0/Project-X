@@ -44,8 +44,10 @@ const searchBooks = async (req, res) => {
         if (filterPubs.length > 0) query.publisher = { $in: filterPubs };
 
         // --- 2. FETCH DATA ---
+        // FIX APPLIED: Added 'accessionType' and 'isbn' to ensure frontend details populate correctly.
+        // 'author' is explicitly included to resolve the missing author name issue.
         const allMatches = await Book.find(query)
-            .select('title author publisher status location shelf callNumber tags coverImage description')
+            .select('title author publisher status location shelf callNumber tags coverImage description accessionType isbn')
             .lean();
 
         // --- 3. PROCESS LOCATIONS ---

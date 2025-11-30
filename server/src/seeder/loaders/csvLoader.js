@@ -15,7 +15,11 @@ const loadCsv = (filePath) => {
         }
 
         fs.createReadStream(filePath)
-            .pipe(csv())
+            // FIX: Trim headers and values to prevent mismatches
+            .pipe(csv({
+                mapHeaders: ({ header }) => header.trim(),
+                mapValues: ({ value }) => value ? value.trim() : ''
+            }))
             .on('data', (data) => results.push(data))
             .on('end', () => resolve(results))
             .on('error', (error) => reject(error));
