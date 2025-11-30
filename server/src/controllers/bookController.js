@@ -1,10 +1,10 @@
 /**
  * server/src/controllers/bookController.js
- * ROBUST ENGINE: Handles Search, Filtering, and Facet Generation
- * FIXED: 'Cross-Reactivity' - Authors/Pubs now react to Location filters
+ * ROBUST ENGINE: Search > Parse > Filter > GROUP > Paginate
  */
 const Book = require('../models/Book');
 const { parseShelf } = require('../utils/shelfUtils'); 
+const { groupBooksByTitle } = require('../utils/bookGrouping'); // Import Grouping
 
 const searchBooks = async (req, res) => {
     try {
@@ -20,12 +20,9 @@ const searchBooks = async (req, res) => {
             cols
         } = req.query;
 
-        // --- 1. BUILD BASE QUERY (Search & Metadata) ---
-        // We filter by Text, Availability, Author, Publisher FIRST.
-        // We DO NOT filter by Location yet, so we can generate Facets for ALL locations.
+        // --- 1. BUILD BASE QUERY ---
         let query = {};
 
-        // A. Smart Search (Title, Author, Tags)
         if (search) {
             const regex = { $regex: search, $options: 'i' };
             query.$or = [
@@ -35,12 +32,10 @@ const searchBooks = async (req, res) => {
             ];
         }
 
-        // B. Availability
         if (availableOnly === 'true') {
             query.status = { $regex: 'available', $options: 'i' };
         }
 
-        // C. Metadata Filters (Exact Match)
         const toArray = (val) => val ? (Array.isArray(val) ? val : [val]) : [];
         const filterAuthors = toArray(authors);
         const filterPubs = toArray(pubs);
@@ -48,12 +43,12 @@ const searchBooks = async (req, res) => {
         if (filterAuthors.length > 0) query.author = { $in: filterAuthors };
         if (filterPubs.length > 0) query.publisher = { $in: filterPubs };
 
-        // --- 2. FETCH ALL MATCHING DOCUMENTS (Lightweight) ---
+        // --- 2. FETCH DATA ---
         const allMatches = await Book.find(query)
-            .select('title author publisher status location shelf callNumber tags coverImage')
+            .select('title author publisher status location shelf callNumber tags coverImage description')
             .lean();
 
-        // --- 3. PROCESS & PARSE LOCATIONS ---
+        // --- 3. PROCESS LOCATIONS ---
         const processedBooks = allMatches.map(book => {
             const rawLoc = book.location || book.Shelf || book.shelf || book.callNumber || 'N/A';
             return {
@@ -62,31 +57,7 @@ const searchBooks = async (req, res) => {
             };
         });
 
-        // --- PREPARE LOCATION FILTERS (MOVED UP) ---
-        // We define the location matching logic here so we can use it during Facet Generation
-        const selectedFloors = toArray(floors);
-        const selectedRacks = toArray(racks); 
-        const selectedCols = toArray(cols);
-
-        const isLocationMatch = (book) => {
-            // If no location filters are active, everything matches
-            if (selectedFloors.length === 0 && selectedRacks.length === 0 && selectedCols.length === 0) return true;
-            
-            if (!book.parsedLocation) return false;
-
-            // Check Floor
-            if (selectedFloors.length > 0 && !selectedFloors.includes(book.parsedLocation.floor)) return false;
-            
-            // Check Rack
-            if (selectedRacks.length > 0 && !selectedRacks.includes(String(book.parsedLocation.rack))) return false;
-
-            // Check Col (if needed)
-            if (selectedCols.length > 0 && !selectedCols.includes(String(book.parsedLocation.col))) return false;
-
-            return true;
-        };
-
-        // --- 4. CALCULATE FACETS (Dynamic Filter Options) ---
+        // --- 4. FACETS (Based on processed books) ---
         const facets = {
             authors: new Set(),
             pubs: new Set(),
@@ -95,40 +66,49 @@ const searchBooks = async (req, res) => {
             cols: new Set()
         };
 
+        const isLocationMatch = (book) => {
+            const selectedFloors = toArray(floors);
+            const selectedRacks = toArray(racks); 
+            
+            if (selectedFloors.length === 0 && selectedRacks.length === 0) return true;
+            if (!book.parsedLocation) return false;
+            
+            if (selectedFloors.length > 0 && !selectedFloors.includes(book.parsedLocation.floor)) return false;
+            if (selectedRacks.length > 0 && !selectedRacks.includes(String(book.parsedLocation.rack))) return false;
+            
+            return true;
+        };
+
         processedBooks.forEach(b => {
-            // --- FIX START: REACTIVITY ---
-            // Only add Authors and Publishers if the book MATCHES the selected Location.
-            // This ensures if you select "Floor 2", you only see Authors on Floor 2.
+            // "Sticky Facets" Logic: Only add Author/Pub if it matches current Location filter
             if (isLocationMatch(b)) {
                 if (b.author) facets.authors.add(b.author);
                 if (b.publisher) facets.pubs.add(b.publisher);
             }
-            // --- FIX END ---
 
-            // For Locations (Floors/Racks), we generally want to see all options 
-            // available within the current Author/Pub search (which is already filtered by DB query).
-            // We do NOT restrict this by `isLocationMatch` because we want to see siblings
-            // (e.g. if I select Floor 2, I still want to see Floor 1 in the list).
-            // Note: The frontend "Sticky Facets" will handle the visual selection state.
-            if (b.parsedLocation && 
-                b.parsedLocation.floor !== 'N/A' && 
-                b.parsedLocation.floor !== 'Unknown') {
-                
+            // Always show all Floors present in the result set
+            if (b.parsedLocation && b.parsedLocation.floor !== 'Unknown') {
                 facets.floors.add(b.parsedLocation.floor);
                 facets.racks.add(b.parsedLocation.rack);
                 facets.cols.add(b.parsedLocation.col);
             }
         });
 
-        // --- 5. APPLY LOCATION FILTERS (The "Side Filter" Logic) ---
+        // --- 5. FILTER ---
         const filteredBooks = processedBooks.filter(book => isLocationMatch(book));
 
+        // --- 5.5 GROUPING (NEW STEP) ---
+        // Combine duplicate copies into single entries
+        const groupedBooks = groupBooksByTitle(filteredBooks);
+
         // --- 6. PAGINATION ---
-        const totalResults = filteredBooks.length;
+        const totalResults = groupedBooks.length; // Count Groups, not individual books
         const currentPage = parseInt(page);
         const limitNum = parseInt(limit);
         const startIndex = (currentPage - 1) * limitNum;
-        const paginatedData = filteredBooks.slice(startIndex, startIndex + limitNum);
+        
+        // Slice the GROUPED array
+        const paginatedData = groupedBooks.slice(startIndex, startIndex + limitNum);
 
         // --- 7. RESPONSE ---
         res.json({

@@ -1,36 +1,30 @@
 /**
  * server/src/seeder/utils/mapper.js
- * REDESIGNED: Strictly maps 'vit_data_bot2.csv' columns to the Schema
+ * Maps CSV columns to the Book model.
+ * UPDATED: Now correctly maps the 'Type' column from your CSV (e.g., "Stack").
  */
 const mapCsvToBook = (row) => {
-    // 1. Safe Extraction Helper
-    const get = (key) => (row[key] ? row[key].trim() : '');
-
-    // 2. Map Fields
     return {
-        // Core Identity
-        title: get('Title'),
+        // Mappings based on your vit_data_bot2.csv headers
+        title: row['Title'] || row['Book Title'],
+        author: row['Author'],
+        publisher: row['Pub'] || row['Publisher'],
         
-        // processing will happen in normalizer.js
-        rawAuthor: get('Author'), 
+        // --- FIX: Map the specific "Type" column ---
+        // We map the CSV column 'Type' to our database field 'accessionType'
+        accessionType: row['Type'] || row['Accession Type'] || 'General',
         
-        // Map CSV 'Pub' -> Schema 'publisher'
-        publisher: get('Pub'), 
+        callNumber: row['CallNo'] || row['Call No'],
+        location: row['Lib'] || row['Location'], // 'Lib' seems to contain Institute Name/Location
+        shelf: row['Shelf'], // 'Shelf' contains the specific rack info (e.g. IIF-R3-C4-D)
         
-        // Location Data
-        location: get('Shelf'),
-        callNumber: get('CallNo'),
+        status: row['Status'] || 'Available',
+        description: row['Desc'] || '',
+        isbn: row['ISBN'] || '',
         
-        // Status & Meta
-        status: get('Status'),
-        description: get('Desc'), // Using physical description as placeholder
-        
-        // Technical
-        meta: {
-            source: 'LocalLibrary',
-            originalId: get('BiblioID'),
-            barcode: get('Barcode')
-        }
+        // Use the 'Shelf' column as the primary location string for parsing later
+        // (Since 'Shelf' has the specific floor/rack data)
+        location: row['Shelf'] || row['CallNo']
     };
 };
 

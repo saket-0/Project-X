@@ -1,39 +1,48 @@
+/**
+ * server/src/utils/bookGrouping.js
+ * Groups duplicate books and selects the best copy to display.
+ */
 const { compareBooksByLocation } = require('./shelfUtils');
 
 const groupBooksByTitle = (books) => {
     const groups = {};
 
     books.forEach(book => {
-        const titleKey = book.Title ? book.Title.trim().toUpperCase() : "UNKNOWN_TITLE";
+        // Create a normalized key (removing case/spaces)
+        const titleKey = book.title ? book.title.trim().toUpperCase() : "UNKNOWN_TITLE";
 
         if (!groups[titleKey]) {
             groups[titleKey] = {
-                // Basic Metadata (will be overwritten by the best copy later)
-                Title: book.Title,
-                Author: book.Author, 
-                Pub: book.Pub,
-                variants: [] 
+                // Initial metadata from the first found copy
+                ...book,
+                variants: [] // We will store all copies here
             };
         }
-
         groups[titleKey].variants.push(book);
     });
 
-    // Process each group to find the "Best" copy to display
+    // Process groups to find the "Best" copy
     return Object.values(groups).map(group => {
-        // Sort variants based on the priority logic (Available > Floor > Rack...)
+        // Sort variants: Available copies on Ground Floor appear first
         group.variants.sort(compareBooksByLocation);
 
-        // The first item is now the "Best" copy
         const bestCopy = group.variants[0];
 
+        // Determine global status
+        // If *any* copy is available, the book is "Available"
+        const anyAvailable = group.variants.some(v => 
+            v.status && v.status.toLowerCase().includes('available')
+        );
+
         return {
-            ...group,
-            // Hoist the best copy's details to the top level for the List View
-            Shelf: bestCopy.Shelf,
-            CallNo: bestCopy.CallNo,
-            Status: bestCopy.Status, // List view will show "Available" if *any* copy is available
-            totalCopies: group.variants.length
+            ...bestCopy, // Inherit all fields from the best copy
+            
+            // Overwrite specific fields with Group logic
+            status: anyAvailable ? 'Available' : bestCopy.status,
+            totalCopies: group.variants.length,
+            
+            // Keep the variants array for the "Details" view
+            variants: group.variants 
         };
     });
 };

@@ -1,33 +1,27 @@
+/**
+ * server/src/models/Book.js
+ */
 const mongoose = require('mongoose');
 
 const bookSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  
-  // PRIMARY FIELDS (Used by Frontend)
-  author: { type: String, index: true },   // Singular (for search/display)
-  location: { type: String, index: true }, // Singular (for shelf parsing)
-  status: String,
-  
-  // RICH METADATA (Used by Detail View)
-  authors: [String],        // Plural (all authors)
-  publisher: String,
-  description: String,
-  tags: [String],
-  coverImage: String,
-  
-  // INVENTORY DATA
-  locations: [String],      // All copies found
-  count: { type: Number, default: 1 },
-  callNumber: String,
-  
-  // ENGINE METADATA
-  meta: {
-    source: String,     // 'Google', 'OpenLib', 'Local'
-    originalId: String
-  }
-}, { timestamps: true });
+    title: { type: String, required: true, index: true },
+    author: { type: String, index: true },
+    publisher: String,
+    
+    // This field will store the "Stack" or "Reference" value from your "Type" column
+    accessionType: { type: String, default: 'General' }, 
+    
+    callNumber: String,
+    isbn: String,
+    location: String, // Stores the raw Shelf string
+    status: { type: String, default: 'Available' },
+    tags: [String],
+    coverImage: String,
+    description: String,
+    
+    createdAt: { type: Date, default: Date.now }
+});
 
-// Enable text search on key fields
 bookSchema.index({ title: 'text', author: 'text', tags: 'text' });
 
 module.exports = mongoose.model('Book', bookSchema);

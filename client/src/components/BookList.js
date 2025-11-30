@@ -18,6 +18,10 @@ const BookList = ({ books, onBookClick }) => {
             footerText = footerText ? `${footerText} • ${tagStr}` : tagStr;
         }
 
+        // Calculate dynamic copies text
+        const copiesCount = book.totalCopies || 1;
+        const copiesText = copiesCount === 1 ? '1 Copy' : `${copiesCount} Copies`;
+
         return (
           <ResponsiveItem
             key={book._id || index}
@@ -28,7 +32,8 @@ const BookList = ({ books, onBookClick }) => {
             stats={[
               { 
                 icon: Layers, 
-                value: '1 Copy', 
+                // --- FIX: Use the calculated copies text instead of hardcoded '1 Copy' ---
+                value: copiesText, 
                 subLabel: 'In Library' 
               },
               { 
