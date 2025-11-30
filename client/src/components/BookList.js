@@ -6,16 +6,19 @@ const BookList = ({ books, onBookClick }) => {
   return (
     <div className="space-y-3">
       {books.map((book, index) => {
-        // --- FIX STARTS HERE ---
-        // Problem: properly rendering 'parsedLocation' failed because the backend regex was strict.
-        // Solution: Use the raw 'location' field, which we now guarantee is clean (e.g. "IIF-R48...")
-        // This matches exactly what works in your BookDetail.js
-        const shelfDisplay = book.location || book.shelf || "Processing...";
-        // --- FIX ENDS HERE ---
+        // FIXED: Use the parsed data from backend if available
+        let shelfDisplay = "Unknown Location";
+        
+        if (book.parsedLocation && book.parsedLocation.floor !== 'N/A') {
+            // Clean format: "IF - Rack 42"
+            shelfDisplay = `${book.parsedLocation.floor} - Rack ${book.parsedLocation.rack}`;
+        } else {
+            // Fallback to raw strings
+            shelfDisplay = book.location || book.shelf || book.callNumber || "Processing...";
+        }
 
         const isAvailable = book.status ? book.status.toLowerCase().includes('available') : false;
 
-        // Footer: Publisher • Tag1, Tag2
         const tags = book.tags || [];
         let footerText = book.publisher || '';
         if (tags.length > 0) {
