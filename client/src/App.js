@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react'; // Removed useMemo
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { Search, BookOpen, ChevronLeft, ChevronRight, SlidersHorizontal, ServerCrash } from 'lucide-react';
+import { Search, BookOpen, SlidersHorizontal, ServerCrash, X } from 'lucide-react'; // Added 'X'
 import BookList from './components/BookList';
 import BookDetail from './components/BookDetail';
 import FilterSidebar from './components/FilterSidebar';
+import Pagination from './components/Pagination'; // Import the new component
 
 // Simple Debounce Hook
 const useDebounce = (value, delay) => {
@@ -15,14 +16,12 @@ const useDebounce = (value, delay) => {
   return debouncedValue;
 };
 
-// --- CONFIG: Point to your backend ---
-// Use environment variable or default to localhost
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 function App() {
   // Data State
   const [books, setBooks] = useState([]);
-  const [facets, setFacets] = useState({ authors: [], pubs: [], floors: [], racks: [], cols: [] }); // NEW: Server Facets
+  const [facets, setFacets] = useState({ authors: [], pubs: [], floors: [], racks: [], cols: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
@@ -48,18 +47,16 @@ function App() {
 
   const debouncedSearch = useDebounce(searchTerm, 500);
 
-  // --- 1. FETCH LOGIC ---
+  // --- FETCH LOGIC ---
   const fetchBooks = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      // Build Params
       const params = {
         page: page,
         limit: 50,
         search: debouncedSearch,
         availableOnly: filters.availableOnly,
-        // Explicitly spread arrays for Axios to handle (e.g. authors[]=X)
         authors: filters.authors,
         pubs: filters.pubs,
         floors: filters.floors,
@@ -71,7 +68,6 @@ function App() {
       
       setBooks(res.data.data || []);
       
-      // CRITICAL FIX: Use Facets from Server, don't calculate locally!
       if (res.data.facets) {
           setFacets(res.data.facets);
       }
@@ -86,26 +82,22 @@ function App() {
     }
   }, [debouncedSearch, page, filters]); 
 
-  // --- 2. EFFECT HOOKS ---
-  
-  // Reset page when Search or Filters change
+  // --- EFFECTS ---
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, filters]);
 
-  // Fetch when Page changes (or implicitly when above effect resets page to 1)
   useEffect(() => {
     fetchBooks();
   }, [fetchBooks]);
 
-
-  // --- 3. FILTER HANDLERS ---
+  // --- HANDLERS ---
   const handleFilterChange = (category, value) => {
     if (category === 'availableOnly') {
       setFilters(prev => ({ ...prev, availableOnly: value }));
     } else {
       setFilters(prev => {
-        const current = prev[category] || []; // Safety check
+        const current = prev[category] || [];
         const updated = current.includes(value)
           ? current.filter(item => item !== value)
           : [...current, value];
@@ -116,6 +108,12 @@ function App() {
 
   const clearFilters = () => {
     setFilters({ availableOnly: false, authors: [], pubs: [], floors: [], racks: [], cols: [] });
+  };
+
+  // New: Clear Search Handler
+  const clearSearch = () => {
+    setSearchTerm('');
+    setPage(1);
   };
 
   return (
@@ -143,15 +141,24 @@ function App() {
                   <SlidersHorizontal className="w-5 h-5 text-gray-600" />
                 </button>
                 
-                <div className="relative w-full md:w-96">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                {/* SEARCH BAR WITH CLEAR BUTTON */}
+                <div className="relative w-full md:w-96 group">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 group-focus-within:text-blue-500 transition-colors" />
                   <input 
                     type="text"
                     placeholder="Search by Title, Author..."
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
+                  {searchTerm && (
+                    <button 
+                      onClick={clearSearch}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-200 transition-all"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -180,7 +187,6 @@ function App() {
               overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent
               ${showMobileFilters ? 'block' : 'hidden md:block'}
             `}>
-              {/* NOW USING SERVER FACETS */}
               <FilterSidebar 
                 facets={facets} 
                 selectedFilters={filters} 
@@ -198,9 +204,6 @@ function App() {
                      {searchTerm && ` for "${searchTerm}"`}
                    </p>
                  </div>
-                 <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
-                   Page {page} of {totalPages}
-                 </span>
               </div>
 
               {loading ? (
@@ -209,29 +212,21 @@ function App() {
                   <p className="text-gray-400 animate-pulse">Scanning Shelves...</p>
                 </div>
               ) : (
-                <BookList 
-                  books={books} 
-                  onBookClick={setSelectedBook} 
-                />
-              )}
-
-              {!loading && books.length > 0 && (
-                <div className="mt-10 flex justify-center gap-3">
-                  <button 
-                    disabled={page === 1}
-                    onClick={() => setPage(p => p - 1)}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium text-gray-700"
-                  >
-                    <ChevronLeft className="w-4 h-4" /> Previous
-                  </button>
-                  <button 
-                    disabled={page === totalPages}
-                    onClick={() => setPage(p => p + 1)}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium text-gray-700"
-                  >
-                    Next <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
+                <>
+                  <BookList 
+                    books={books} 
+                    onBookClick={setSelectedBook} 
+                  />
+                  
+                  {/* NEW PAGINATION COMPONENT */}
+                  {books.length > 0 && (
+                    <Pagination 
+                      currentPage={page}
+                      totalPages={totalPages}
+                      onPageChange={(p) => setPage(p)}
+                    />
+                  )}
+                </>
               )}
             </div>
           </div>

@@ -6,14 +6,11 @@ const BookList = ({ books, onBookClick }) => {
   return (
     <div className="space-y-3">
       {books.map((book, index) => {
-        // --- FIX: RAW FORMAT RESTORED ---
-        // We use the raw 'location' field directly (e.g. "IIF-R9-C10-D")
-        // The "Friendly" names (1st Floor) are now reserved ONLY for the Sidebar Filters.
-        const shelfDisplay = book.location || book.shelf || "Processing...";
+        // --- FIX: Show "N/A" if location is missing ---
+        const shelfDisplay = book.location || book.shelf || "N/A";
 
         const isAvailable = book.status ? book.status.toLowerCase().includes('available') : false;
 
-        // Footer: Publisher • Tag1, Tag2
         const tags = book.tags || [];
         let footerText = book.publisher || '';
         if (tags.length > 0) {

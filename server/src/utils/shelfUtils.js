@@ -1,9 +1,8 @@
 /**
  * server/src/utils/shelfUtils.js
- * REDESIGNED: Handles Friendly Floor Names and Parsing
+ * FIXED: Handles Typos (LLF, LLP) and Flexible Spacing
  */
 
-// 1. Friendly Name Mapping
 const FLOOR_LABELS = {
     'GD': 'Ground Floor',
     'IF': '1st Floor',
@@ -11,7 +10,14 @@ const FLOOR_LABELS = {
     'IIIF': '3rd Floor',
     'IVF': '4th Floor',
     'STACK': 'Stack Room',
-    'REF': 'Reference Section'
+    'REF': 'Reference Section',
+    
+    // --- FIX FOR DATA TYPOS ---
+    'LLF': '2nd Floor',  // Common typo for IIF
+    'LLP': '2nd Floor',  // Common typo
+    'LIF': '1st Floor',
+    '1F': '1st Floor',
+    '2F': '2nd Floor'
 };
 
 const FLOOR_PRIORITY = {
@@ -24,34 +30,29 @@ const FLOOR_PRIORITY = {
     'Unknown': 100
 };
 
-/**
- * Parses a shelf string "IF-R42-C1" -> { floor: "1st Floor", rack: 42, ... }
- */
 const parseShelf = (shelfStr) => {
     if (!shelfStr || shelfStr === 'N/A') return null;
 
-    // Clean up input
     const cleanStr = shelfStr.trim().toUpperCase();
 
-    // Regex to capture: FLOOR - Rack X - Col Y
-    // Matches: "IF-R42", "IIF-R10-C1", "GD-R5"
-    const regex = /^([A-Z]+)-R(\d+)(?:-C(\d+))?/;
+    // REGEX UPDATE: Allows optional spaces/hyphens
+    // Matches: "IIF-R10", "IIF - R10", "LLF R10"
+    const regex = /^([A-Z0-9]+)[\s-]*R(\d+)(?:[\s-]*C(\d+))?/;
     const match = cleanStr.match(regex);
 
     if (match) {
-        const rawFloorCode = match[1]; // e.g., "IF"
-        const friendlyFloor = FLOOR_LABELS[rawFloorCode] || rawFloorCode; // "1st Floor"
+        const rawFloorCode = match[1]; 
+        const friendlyFloor = FLOOR_LABELS[rawFloorCode] || 'Unknown'; // Default to Unknown if code not found
 
         return {
             raw: shelfStr,
-            floor: friendlyFloor, // <--- This is what the UI will show
+            floor: friendlyFloor,
             rack: parseInt(match[2], 10),
             col: match[3] ? parseInt(match[3], 10) : 0,
-            floorPriority: FLOOR_PRIORITY[friendlyFloor] || 99
+            floorPriority: FLOOR_PRIORITY[friendlyFloor] || 100
         };
     }
 
-    // Fallback for non-standard codes
     return {
         raw: shelfStr,
         floor: 'Unknown',
