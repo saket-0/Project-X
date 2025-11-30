@@ -6,22 +6,18 @@ const BookList = ({ books, onBookClick }) => {
   return (
     <div className="space-y-3">
       {books.map((book, index) => {
-        // 1. DATA NORMALIZATION (Handle Mongo lowercase or CSV Uppercase)
-        const title = book.title || book.Title || 'Untitled';
-        const author = book.author || book.Author || 'Unknown Author';
-        const publisher = book.publisher || book.Pub;
-        const status = book.status || book.Status || 'Unknown';
-        const shelf = book.shelf || book.Shelf || book.location || book.callNumber || "N/A";
-        
-        // Mongo returns flat list, so we assume 1 copy unless we aggregate later
-        const copies = book.totalCopies || 1; 
-        const isAvailable = status.toLowerCase().includes('available');
+        // We can now trust the Mongo Schema keys (lowercase)
+        // If parsedLocation exists (from our new Controller), use it!
+        const shelfDisplay = book.parsedLocation 
+            ? `${book.parsedLocation.floorLabel} - Rack ${book.parsedLocation.rack}`
+            : (book.shelf || book.location || "N/A");
 
-        // 2. SMART TAGS DISPLAY
+        const isAvailable = book.status ? book.status.toLowerCase().includes('available') : false;
+
+        // Footer: Publisher • Tag1, Tag2
         const tags = book.tags || [];
-        let footerText = publisher || '';
+        let footerText = book.publisher || '';
         if (tags.length > 0) {
-            // Add tags to the footer (Publisher • Tag1, Tag2)
             const tagStr = tags.slice(0, 3).join(', ');
             footerText = footerText ? `${footerText} • ${tagStr}` : tagStr;
         }
@@ -30,27 +26,21 @@ const BookList = ({ books, onBookClick }) => {
           <ResponsiveItem
             key={book._id || index}
             onClick={() => onBookClick(book)}
-            
-            // 1. Basic Info
-            title={title}
-            subtitle={author}
-            tertiary={footerText} // Shows publisher + smart tags
-            
-            // 2. Statistics/Metadata
+            title={book.title || 'Untitled'}
+            subtitle={book.author || 'Unknown Author'}
+            tertiary={footerText}
             stats={[
               { 
                 icon: Layers, 
-                value: copies > 1 ? `${copies} Copies` : 'Single Copy', 
-                subLabel: 'Availability' 
+                value: '1 Copy', // Simplified unless you actually track copies
+                subLabel: 'In Library' 
               },
               { 
                 icon: MapPin, 
-                value: shelf, 
+                value: shelfDisplay, 
                 subLabel: 'Location' 
               }
             ]}
-            
-            // 3. Status
             status={{
               isPositive: isAvailable,
               label: isAvailable ? 'Available' : 'Out'

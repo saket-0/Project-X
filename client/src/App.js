@@ -1,15 +1,14 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import axios from 'axios';
+import React, { useState, useMemo } from 'react';
 import { Search, BookOpen, ChevronLeft, ChevronRight, SlidersHorizontal, ServerCrash } from 'lucide-react';
 import BookList from './components/BookList';
 import BookDetail from './components/BookDetail';
 import FilterSidebar from './components/FilterSidebar';
-import { parseShelf } from './utils/shelfUtils';
+import { useBooks } from './hooks/useBooks'; // Import the new hook
 
-// Debounce Hook
+// Simple Debounce for Input
 const useDebounce = (value, delay) => {
   const [debouncedValue, setDebouncedValue] = useState(value);
-  useEffect(() => {
+  React.useEffect(() => {
     const handler = setTimeout(() => setDebouncedValue(value), delay);
     return () => clearTimeout(handler);
   }, [value, delay]);
@@ -17,21 +16,12 @@ const useDebounce = (value, delay) => {
 };
 
 function App() {
-  const [books, setBooks] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  
-  // Search & Pagination
-  const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
-  const [totalResults, setTotalResults] = useState(0);
-  
   // UI State
+  const [searchTerm, setSearchTerm] = useState('');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [selectedBook, setSelectedBook] = useState(null);
   
-  // Filter Selection State
+  // Filter State
   const [filters, setFilters] = useState({
     availableOnly: false,
     authors: [],
@@ -43,62 +33,26 @@ function App() {
 
   const debouncedSearch = useDebounce(searchTerm, 500);
 
-  // --- API Fetching ---
-  const fetchBooks = useCallback(async (searchQuery, pageNum) => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Note: Ensure your backend runs on port 5001 as configured
-      const res = await axios.get(`http://localhost:5001/api/books`, {
-        params: { search: searchQuery, page: pageNum, limit: 50 } 
-      });
-      
-      // Handle both old and new API response structures safely
-      const bookData = res.data.data || [];
-      const metaData = res.data.meta || { totalPages: 0, totalResults: 0 };
+  // USE THE HOOK - Pass search and filters to the backend!
+  const { books, loading, error, pagination, goToPage } = useBooks(debouncedSearch, filters);
 
-      setBooks(bookData);
-      setTotalPages(metaData.totalPages);
-      setTotalResults(metaData.totalResults);
-    } catch (err) {
-      console.error("Failed to fetch books", err);
-      setError("Could not connect to the Library Database. Please check if the server is running.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    setPage(1);
-    fetchBooks(debouncedSearch, 1);
-  }, [debouncedSearch, fetchBooks]);
-
-  useEffect(() => {
-    fetchBooks(debouncedSearch, page);
-  }, [page, fetchBooks, debouncedSearch]);
-
-  // --- Filter Logic (Adapted for MongoDB Schema) ---
+  // Facet Logic
+  // Ideally, facets should also come from the API (e.g. /api/facets). 
+  // For now, we derive them from the CURRENT books to keep the UI working without a new API endpoint.
+  // Note: This will only show filters for books currently visible. 
   const facets = useMemo(() => {
     const authors = new Set();
     const pubs = new Set();
     const floors = new Set();
     const racks = new Set();
-    const cols = new Set();
 
     books.forEach(b => {
-      // Handle MongoDB lowercase keys OR CSV Uppercase keys
-      const author = b.author || b.Author;
-      const publisher = b.publisher || b.Pub;
-      const shelf = b.shelf || b.Shelf || b.location; // Fallback to location if shelf is missing
-
-      if(author) authors.add(author);
-      if(publisher) pubs.add(publisher);
-      
-      const loc = parseShelf(shelf);
-      if (loc) {
-        floors.add(loc.floorLabel); 
-        racks.add(loc.rack);        
-        cols.add(loc.col);          
+      if(b.author) authors.add(b.author);
+      if(b.publisher) pubs.add(b.publisher);
+      // Use the pre-parsed location from the server!
+      if (b.parsedLocation) {
+        floors.add(b.parsedLocation.floorLabel); 
+        racks.add(b.parsedLocation.rack);        
       }
     });
 
@@ -107,64 +61,25 @@ function App() {
       pubs: Array.from(pubs).sort(),
       floors: Array.from(floors).sort(),
       racks: Array.from(racks).sort((a, b) => a - b),
-      cols: Array.from(cols).sort((a, b) => a - b)
+      cols: [] // Simplified for now
     };
   }, [books]);
 
   const handleFilterChange = (category, value) => {
-    if (category === 'availableOnly') {
-      setFilters(prev => ({ ...prev, availableOnly: value }));
-    } else {
-      setFilters(prev => {
-        const current = prev[category];
-        const updated = current.includes(value)
-          ? current.filter(item => item !== value)
-          : [...current, value];
-        return { ...prev, [category]: updated };
-      });
-    }
+    setFilters(prev => {
+      if (category === 'availableOnly') return { ...prev, availableOnly: value };
+      
+      const current = prev[category];
+      const updated = current.includes(value)
+        ? current.filter(item => item !== value)
+        : [...current, value];
+      return { ...prev, [category]: updated };
+    });
   };
 
   const clearFilters = () => {
-    setFilters({
-      availableOnly: false,
-      authors: [],
-      pubs: [],
-      floors: [],
-      racks: [],
-      cols: []
-    });
+    setFilters({ availableOnly: false, authors: [], pubs: [], floors: [], racks: [], cols: [] });
   };
-
-  // Client-side filtering logic
-  const filteredBooks = useMemo(() => {
-    return books.filter(book => {
-      // Normalize Keys
-      const status = book.status || book.Status || '';
-      const author = book.author || book.Author || '';
-      const publisher = book.publisher || book.Pub || '';
-      const shelf = book.shelf || book.Shelf || book.location;
-
-      if (filters.availableOnly) {
-        if (!status.toLowerCase().includes('available')) return false;
-      }
-      
-      if (filters.authors.length > 0 && !filters.authors.includes(author)) return false;
-      if (filters.pubs.length > 0 && !filters.pubs.includes(publisher)) return false;
-
-      if (filters.floors.length > 0 || filters.racks.length > 0 || filters.cols.length > 0) {
-        const loc = parseShelf(shelf);
-        
-        if (!loc) return false;
-
-        if (filters.floors.length > 0 && !filters.floors.includes(loc.floorLabel)) return false;
-        if (filters.racks.length > 0 && !filters.racks.includes(loc.rack)) return false;
-        if (filters.cols.length > 0 && !filters.cols.includes(loc.col)) return false;
-      }
-
-      return true;
-    });
-  }, [books, filters]);
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-20">
@@ -229,11 +144,8 @@ function App() {
           <div className="flex flex-col md:flex-row gap-8 items-start relative">
             
             <aside className={`
-              w-full md:w-64 flex-shrink-0 
-              sticky top-24 
-              h-[calc(100vh-8rem)] 
-              overflow-y-auto 
-              scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent
+              w-full md:w-64 flex-shrink-0 sticky top-24 h-[calc(100vh-8rem)] 
+              overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent
               ${showMobileFilters ? 'block' : 'hidden md:block'}
             `}>
               <FilterSidebar 
@@ -249,12 +161,12 @@ function App() {
                  <div>
                    <h2 className="text-2xl font-bold text-gray-900">Library Catalog</h2>
                    <p className="text-gray-500 text-sm mt-1">
-                     Showing {filteredBooks.length} results 
+                     Showing {books.length} results 
                      {searchTerm && ` for "${searchTerm}"`}
                    </p>
                  </div>
                  <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
-                   Page {page} of {totalPages || 1}
+                   Page {pagination.page} of {pagination.totalPages || 1}
                  </span>
               </div>
 
@@ -265,7 +177,7 @@ function App() {
                 </div>
               ) : (
                 <BookList 
-                  books={filteredBooks} 
+                  books={books} 
                   onBookClick={setSelectedBook} 
                 />
               )}
@@ -273,15 +185,15 @@ function App() {
               {!loading && books.length > 0 && (
                 <div className="mt-10 flex justify-center gap-3">
                   <button 
-                    disabled={page === 1}
-                    onClick={() => setPage(p => p - 1)}
+                    disabled={pagination.page === 1}
+                    onClick={() => goToPage(pagination.page - 1)}
                     className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium text-gray-700"
                   >
                     <ChevronLeft className="w-4 h-4" /> Previous
                   </button>
                   <button 
-                    disabled={page === totalPages}
-                    onClick={() => setPage(p => p + 1)}
+                    disabled={pagination.page === pagination.totalPages}
+                    onClick={() => goToPage(pagination.page + 1)}
                     className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium text-gray-700"
                   >
                     Next <ChevronRight className="w-4 h-4" />

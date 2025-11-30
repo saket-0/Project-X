@@ -1,39 +1,40 @@
-require('dotenv').config();
+require('dotenv').config({ path: '../.env' }); // Load env vars from server root
 const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
 const csv = require('csv-parser');
 const axios = require('axios');
 const Book = require('../src/models/Book');
+const { cleanAndMergeTags } = require('../src/utils/tagEngine'); 
 
-// 1. Connection Config
-// Local DB URL. 'library_db' is the name of the database we will create.
-const MONGO_URI = 'mongodb://localhost:27017/library_db';
-const DATA_FOLDER = path.join(__dirname, '../library_data');
+// 1. Connection & Config
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/library_db';
 const GOOGLE_BOOKS_API = 'https://www.googleapis.com/books/v1/volumes';
+const API_KEY = process.env.GOOGLE_BOOKS_API_KEY; 
+const DATA_FOLDER = path.join(__dirname, '../library_data');
 
-// 2. The Smart Tag Logic
+// 2. The Smart Tag Logic (Refactored)
 const getSmartTags = async (title, author) => {
     try {
-        // Query Google Books
         const query = `${title} ${author || ''}`;
-        const url = `${GOOGLE_BOOKS_API}?q=${encodeURIComponent(query)}&maxResults=1`;
+        
+        // Securely attach API Key if available
+        let url = `${GOOGLE_BOOKS_API}?q=${encodeURIComponent(query)}&maxResults=1`;
+        if (API_KEY) {
+            url += `&key=${API_KEY}`;
+        }
+
         const response = await axios.get(url);
 
         if (response.data.items && response.data.items.length > 0) {
             const info = response.data.items[0].volumeInfo;
             const categories = info.categories || [];
             
-            // Extract keywords from description
-            let keywords = [];
-            if (info.description) {
-                const desc = info.description.toLowerCase();
-                const concepts = ['javascript', 'python', 'physics', 'mechanics', 'history', 'algorithms', 'web', 'data structure'];
-                keywords = concepts.filter(c => desc.includes(c));
-            }
-            
+            // USE THE TAG ENGINE: Cleans and standardizes categories
+            const cleanedTags = cleanAndMergeTags(categories);
+
             return {
-                tags: [...new Set([...categories, ...keywords])],
+                tags: cleanedTags,
                 description: info.description ? info.description.substring(0, 500) + '...' : ''
             };
         }
@@ -53,6 +54,11 @@ const seedDatabase = async () => {
         // Optional: Clear old data to start fresh
         // await Book.deleteMany({}); 
         // console.log('🗑️  Cleared old data');
+
+        if (!fs.existsSync(DATA_FOLDER)) {
+            console.error(`❌ Data folder not found at: ${DATA_FOLDER}`);
+            process.exit(1);
+        }
 
         const files = fs.readdirSync(DATA_FOLDER).filter(f => f.endsWith('.csv'));
 
@@ -80,7 +86,7 @@ const seedDatabase = async () => {
                 const author = row.Author ? row.Author.replace('By:', '').trim() : '';
 
                 // FETCH SMART DATA
-                // We add a tiny delay to be polite to the API
+                // We add a tiny delay to prevent rate limits if no API Key is used
                 const smartData = await getSmartTags(title, author);
                 
                 // Save to DB

@@ -1,25 +1,21 @@
-require('dotenv').config();
+require('dotenv').config({ path: '../.env' }); // Load env vars from server root
 const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
 const csv = require('csv-parser');
 const axios = require('axios');
-const natural = require('natural');
+const natural = require('natural'); // NLP Library for better tagging
 const pLimit = require('p-limit');
 
 const Book = require('../src/models/Book');
 
 // --- CONFIGURATION ---
-const CONCURRENCY_LIMIT = 5; // Keep this low for Open Library's sake
+const CONCURRENCY_LIMIT = 5; // Keep low to avoid rate limits
 const BATCH_SIZE = 50;
-const GOOGLE_API_KEY = "AIzaSyC2SArU3AIbcCdLu_35JXJ9whgyREjkzkw"; 
+const DATA_FOLDER = path.join(__dirname, '../library_data');
 
-const CSV_FILES = [
-    'vit_data_bot1.csv',
-    'vit_data_bot2.csv',
-    'vit_data_bot3.csv',
-    'vit_data_bot4.csv'
-];
+// SECURITY FIX: Load Key from Environment
+const GOOGLE_API_KEY = process.env.GOOGLE_BOOKS_API_KEY;
 
 // Aggressive Stop Words List to remove library catalog noise
 const STOP_WORDS = new Set([
@@ -40,14 +36,17 @@ const STOP_WORDS = new Set([
 let GOOGLE_QUOTA_EXHAUSTED = false;
 
 // --- INITIALIZATION ---
-if (!GOOGLE_API_KEY || GOOGLE_API_KEY.includes("PASTE")) {
-    console.error("❌ ERROR: Please paste your Google API Key in the script!");
-    process.exit(1);
+if (!GOOGLE_API_KEY) {
+    console.warn("⚠️  WARNING: No GOOGLE_BOOKS_API_KEY found in .env. Script will run in 'OpenLib Only' mode (slower/less accurate).");
+    GOOGLE_QUOTA_EXHAUSTED = true; 
 }
 
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/project-x')
+// Fix Mongo Connection to use env var
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/library_db';
+
+mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected'))
-  .catch(err => console.error(err));
+  .catch(err => console.error("❌ DB Error:", err));
 
 const tokenizer = new natural.WordTokenizer();
 const limit = pLimit(CONCURRENCY_LIMIT);
@@ -59,10 +58,8 @@ function generateRichTags(bookInfo) {
     const { title, subtitle, description, categories, publisher, authors, subjects } = bookInfo;
 
     // 1. Explicit Categories (Google) or Subjects (OpenLibrary)
-    // This grabs "Web Development" even if title is just "Advanced JS"
     const cats = [...(categories || []), ...(subjects || [])];
     cats.forEach(cat => {
-        // Split hierarchies like "Computers / Web / Design"
         cat.toString().split(/[\/|]/).forEach(s => {
             const clean = s.trim();
             if (clean.length > 2 && !STOP_WORDS.has(clean.toLowerCase())) {
@@ -78,11 +75,8 @@ function generateRichTags(bookInfo) {
     }
     if (authors) authors.forEach(a => tags.add(a));
 
-    // 3. Content Mining (The Core Solution)
-    // Combine Title, Subtitle, and API Description for frequency analysis
+    // 3. Content Mining (NLP)
     let textToScan = `${title} ${subtitle || ''}`;
-    
-    // Only use description if it's valid and not the default "No description available"
     if (description && !description.toLowerCase().includes('no description available')) {
         textToScan += ` ${description}`;
     }
@@ -92,14 +86,12 @@ function generateRichTags(bookInfo) {
 
     words.forEach(word => {
         const w = word.toLowerCase();
-        // Filter noise: must be > 2 chars, not a stop word, not a number
         if (w.length > 2 && !STOP_WORDS.has(w) && isNaN(w)) {
             wordFreq[w] = (wordFreq[w] || 0) + 1;
         }
     });
 
-    // 4. Convert top frequent words to tags (Top 40 keywords)
-    // If "Javascript" appears 5 times in the description, it WILL be a tag now.
+    // 4. Extract Top Keywords
     Object.entries(wordFreq)
         .sort(([,a], [,b]) => b - a)
         .slice(0, 40) 
@@ -134,12 +126,11 @@ async function fetchGoogleMetadata(title, author, retries = 1) {
                 return { ...res.data.items[0].volumeInfo, source: 'Google' };
             }
         } catch (e) {
-            // 403 = Daily Limit Exceeded (Stop using Google today)
             if (e.response && e.response.status === 403) {
+                console.warn("⚠️  Google API Quota Exceeded. Switching to OpenLibrary...");
                 GOOGLE_QUOTA_EXHAUSTED = true; 
                 return null;
             }
-            // 429 = Rate Limit (Just wait a bit)
             if (e.response && e.response.status === 429 && retries > 0) {
                 await sleep(2000); 
                 return fetchGoogleMetadata(title, author, retries - 1);
@@ -149,18 +140,15 @@ async function fetchGoogleMetadata(title, author, retries = 1) {
     return null;
 }
 
-// --- OPEN LIBRARY FETCHER (Fixed "By:" Issue) ---
+// --- OPEN LIBRARY FETCHER ---
 async function fetchOpenLibraryMetadata(title, author) {
     try {
-        // CLEANING: This fixes the "X" error.
-        // Removes "By:", "Dr.", special chars before searching.
         const cleanTitle = title.replace(/[^\w\s]/gi, ' ').trim();
         const cleanAuthor = author ? author.replace(/By:|Dr\.|Prof\.|Mr\.|Mrs\./gi, '').replace(/[^\w\s]/gi, ' ').trim() : '';
 
         const q = `title=${encodeURIComponent(cleanTitle)}&author=${encodeURIComponent(cleanAuthor)}`;
         const url = `https://openlibrary.org/search.json?${q}&limit=1`;
         
-        // Increased timeout to 8s because OL is slower than Google
         const res = await axios.get(url, { timeout: 8000 });
         if (res.data.docs && res.data.docs.length > 0) {
             const doc = res.data.docs[0];
@@ -171,8 +159,8 @@ async function fetchOpenLibraryMetadata(title, author) {
                 authors: doc.author_name || [],
                 publisher: doc.publisher ? doc.publisher[0] : null,
                 publishedDate: doc.first_publish_year ? doc.first_publish_year.toString() : null,
-                subjects: doc.subject || [], // This is crucial for tags!
-                description: "", // OL Search usually doesn't give desc, but subjects fill the gap
+                subjects: doc.subject || [],
+                description: "", 
                 source: 'OpenLib'
             };
         }
@@ -183,19 +171,24 @@ async function fetchOpenLibraryMetadata(title, author) {
 // --- MAIN LOGIC ---
 async function run() {
     
-    // 1. READ ALL CSV FILES
+    // 1. DYNAMIC FILE LOADING (Fixes hardcoded list)
+    if (!fs.existsSync(DATA_FOLDER)) {
+        console.error(`❌ Data folder not found at: ${DATA_FOLDER}`);
+        process.exit(1);
+    }
+    const csvFiles = fs.readdirSync(DATA_FOLDER).filter(f => f.endsWith('.csv'));
+    console.log(`📂 Found ${csvFiles.length} CSV files to process.`);
+
     const allRows = [];
-    for (const file of CSV_FILES) {
-        const filePath = path.join(__dirname, '../library_data', file);
-        if (fs.existsSync(filePath)) {
-            console.log(`📂 Reading ${file}...`);
-            await new Promise((resolve) => {
-                fs.createReadStream(filePath)
-                  .pipe(csv())
-                  .on('data', (row) => allRows.push(row))
-                  .on('end', resolve);
-            });
-        }
+    for (const file of csvFiles) {
+        const filePath = path.join(DATA_FOLDER, file);
+        console.log(`   Reading ${file}...`);
+        await new Promise((resolve) => {
+            fs.createReadStream(filePath)
+              .pipe(csv())
+              .on('data', (row) => allRows.push(row))
+              .on('end', resolve);
+        });
     }
     console.log(`📊 Total Records Loaded: ${allRows.length}`);
 
@@ -204,6 +197,7 @@ async function run() {
     allRows.forEach(row => {
         const title = row.Title || 'Unknown';
         const author = row.Author || '';
+        // Normalization Key
         const key = (title + author).toLowerCase().replace(/[^\w]/g, '');
 
         if (!uniqueBooksMap.has(key)) {
@@ -215,6 +209,7 @@ async function run() {
                 localPubDate: row.Pub
             });
         }
+        // Handle call numbers
         if (row.CallNo) uniqueBooksMap.get(key).locations.add(row.CallNo);
     });
 
@@ -223,10 +218,6 @@ async function run() {
 
     // 3. PROCESS QUEUE
     console.log('\n🚀 Starting Intelligent Enrichment (Hybrid Mode)...');
-    console.log('---------------------------------------------------------------');
-    console.log(' G = Enriched via Google API (Rich Description & Tags)');
-    console.log(' O = Enriched via Open Library (Subjects as Tags)');
-    console.log(' . = Local Data Only (No match found in APIs)');
     console.log('---------------------------------------------------------------');
     
     let processedCount = 0;
@@ -237,17 +228,17 @@ async function run() {
     const processGroup = async (group) => {
         let apiData = null;
         
-        // 1. Try Google
+        // Try Google first
         if (!GOOGLE_QUOTA_EXHAUSTED) {
             apiData = await fetchGoogleMetadata(group.rawTitle, group.rawAuthor);
         }
 
-        // 2. Failover to Open Library (Cleaned Query)
+        // Failover to Open Library
         if (!apiData) {
             apiData = await fetchOpenLibraryMetadata(group.rawTitle, group.rawAuthor);
         }
 
-        // Visual Indicator
+        // Stats
         if (apiData && apiData.source === 'Google') {
             process.stdout.write('G');
             googleCount++;
@@ -258,12 +249,11 @@ async function run() {
             process.stdout.write('.');
         }
 
-        // Prepare Data
+        // Prepare Data Object
         const bookInfo = {
             title: apiData?.title || group.rawTitle,
             subtitle: apiData?.subtitle,
             authors: apiData?.authors || [group.rawAuthor],
-            // Use API description or fallback text. NEVER use CSV description.
             description: apiData?.description || "No description available.",
             categories: apiData?.categories || [], 
             subjects: apiData?.subjects || [],     
@@ -271,8 +261,6 @@ async function run() {
             publishedDate: apiData?.publishedDate || group.localPubDate,
             pageCount: apiData?.pageCount,
             language: apiData?.language,
-            averageRating: apiData?.averageRating,
-            ratingsCount: apiData?.ratingsCount,
             coverImage: apiData?.imageLinks?.thumbnail || '',
             previewLink: apiData?.previewLink
         };
@@ -300,12 +288,14 @@ async function run() {
         batchOps.push(op);
         processedCount++;
 
+        // Batch Write
         if (batchOps.length >= BATCH_SIZE) {
             const opsToSave = [...batchOps];
             batchOps = []; 
             await Book.bulkWrite(opsToSave);
         }
 
+        // Progress Log
         if (processedCount % 50 === 0) {
              const percent = ((processedCount / uniqueBooks.length) * 100).toFixed(1);
              console.log(` [${processedCount}] ${percent}% (G:${googleCount} O:${olCount})`);
@@ -314,6 +304,7 @@ async function run() {
 
     await Promise.all(promises);
 
+    // Save remaining
     if (batchOps.length > 0) {
         await Book.bulkWrite(batchOps);
     }
