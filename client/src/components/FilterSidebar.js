@@ -7,16 +7,22 @@ const FilterGroup = ({ title, options, selected, onChange, icon: Icon, variant =
   const isGrid = variant === 'grid';
 
   return (
-    <div className="mb-8">
-      <div className="flex items-center gap-2 mb-3">
-        {Icon && <Icon className="w-3 h-3 text-blue-500" />}
-        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+    <div className="mb-5"> {/* Reduced bottom margin for tighter spacing */}
+      <div className="flex items-center gap-2 mb-2"> {/* Reduced header margin */}
+        {Icon && <Icon className="w-3.5 h-3.5 text-blue-600" />}
+        {/* Fixed Color: Changed to text-gray-900 for high contrast matching others */}
+        <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
           {title}
         </h3>
       </div>
       
       {isGrid ? (
-        <div className="grid grid-cols-4 gap-2">
+        /* FIXED GRID LAYOUT:
+           - flex flex-wrap: Allows items to wrap naturally.
+           - justify-center: Keeps the whole block centered in the sidebar.
+           - w-11: Fixed width for every button ensures perfect uniformity.
+        */
+        <div className="flex flex-wrap justify-center gap-2">
           {options.map((opt) => {
             const isSelected = selected.includes(opt);
             return (
@@ -24,8 +30,8 @@ const FilterGroup = ({ title, options, selected, onChange, icon: Icon, variant =
                 key={opt}
                 onClick={() => onChange(opt)}
                 className={`
-                  px-1 py-1.5 text-xs font-medium rounded border transition-all
-                  flex items-center justify-center
+                  w-11 h-9 text-xs font-medium rounded border transition-all
+                  flex items-center justify-center flex-shrink-0
                   ${isSelected 
                     ? 'bg-blue-600 border-blue-600 text-white shadow-sm' 
                     : 'bg-white border-gray-200 text-gray-600 hover:border-blue-400 hover:text-blue-600'}
@@ -38,7 +44,7 @@ const FilterGroup = ({ title, options, selected, onChange, icon: Icon, variant =
           })}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {options.map((opt) => {
             const isSelected = selected.includes(opt);
             return (
@@ -73,24 +79,26 @@ const FilterSidebar = ({ facets, selectedFilters, onFilterChange, onClearFilters
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 min-h-full">
       
       {/* Header with Clear Button */}
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-blue-600" />
-          <h2 className="font-bold text-gray-800">Filters</h2>
+          <h2 className="font-bold text-gray-900">Filters</h2>
         </div>
         
         <button 
           onClick={onClearFilters}
-          className="text-xs font-medium text-gray-400 hover:text-blue-600 transition-colors flex items-center gap-1"
+          className="group flex items-center gap-1 px-2 py-1 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-600 transition-all text-xs font-medium"
+          title="Reset all filters"
         >
-          <X className="w-3 h-3" />
-          Clear
+          <X className="w-3 h-3 group-hover:rotate-90 transition-transform" />
+          <span>Clear</span>
         </button>
       </div>
 
       {/* Availability Filter */}
       <div className="mb-6">
-        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Status</h3>
+        {/* Fixed Color: text-gray-900 */}
+        <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2">Status</h3>
         <label className="flex items-center gap-3 cursor-pointer text-sm text-gray-700 group">
           <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all flex-shrink-0 ${selectedFilters.availableOnly ? 'bg-green-600 border-green-600' : 'bg-white border-gray-300 group-hover:border-green-500'}`}>
             {selectedFilters.availableOnly && <Check className="w-3 h-3 text-white" />}
@@ -108,7 +116,7 @@ const FilterSidebar = ({ facets, selectedFilters, onFilterChange, onClearFilters
       </div>
 
       {/* Location Section */}
-      <div className="mb-8 pt-4 border-t border-gray-100">
+      <div className="mb-4 pt-4 border-t border-gray-100">
         <div className="flex items-center gap-2 mb-4">
           <MapPin className="w-4 h-4 text-blue-600" />
           <h2 className="font-bold text-gray-800 text-sm">Location</h2>

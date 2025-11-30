@@ -27,37 +27,45 @@ const ResponsiveItem = ({
       </div>
 
       {/* 2. Responsive Stats Row (Smart Flex) */}
-      <div className="flex items-center gap-3 md:gap-6 shrink-0 w-full md:w-auto mt-1 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-100">
+      <div className="flex items-center gap-2 md:gap-6 shrink-0 w-full md:w-auto mt-1 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-100">
         
-        {stats.map((stat, idx) => (
-          <div 
-            key={idx} 
-            // AUTOMATIC LOGIC:
-            // If it's the last item (usually Location), give it flex-1 to fill space.
-            // If it's an earlier item (Copies), keep it compact (shrink-0).
-            className={`${idx === stats.length - 1 ? 'flex-1 min-w-0' : 'shrink-0'} flex md:flex-col md:items-center md:justify-center md:w-28`}
-          >
-             <div className="md:hidden sr-only">{stat.label}</div>
-             
-             <span className="inline-flex items-center gap-1.5 px-2 py-1 md:px-0 md:py-0 rounded-md text-xs md:text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 md:bg-transparent md:border-0 w-full md:w-auto justify-center">
-                {stat.icon && <stat.icon className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
-                <span className="truncate">{stat.value}</span>
-             </span>
-             {stat.subLabel && <span className="hidden md:block text-[10px] text-gray-400 uppercase tracking-wider font-bold mt-1">{stat.subLabel}</span>}
-          </div>
-        ))}
+        {stats.map((stat, idx) => {
+          // Identify if this is the last item (usually Location) which needs to flex
+          const isLast = idx === stats.length - 1;
+          
+          return (
+            <div 
+              key={idx} 
+              className={`${isLast ? 'flex-1 min-w-0' : 'shrink-0'} flex md:flex-col md:items-center md:justify-center md:w-28`}
+            >
+               <div className="md:hidden sr-only">{stat.label}</div>
+               
+               <span className={`
+                 inline-flex items-center gap-1.5 px-2 py-1 md:px-0 md:py-0 
+                 rounded-md text-xs md:text-sm font-medium text-gray-600 
+                 bg-gray-50 border border-gray-200 md:bg-transparent md:border-0 
+                 w-full md:w-auto
+                 ${isLast ? 'justify-start' : 'justify-center'} /* Fix: Left align content in flex-1 box */
+               `}>
+                  {stat.icon && <stat.icon className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
+                  <span className="truncate">{stat.value}</span>
+               </span>
+               {stat.subLabel && <span className="hidden md:block text-[10px] text-gray-400 uppercase tracking-wider font-bold mt-1">{stat.subLabel}</span>}
+            </div>
+          );
+        })}
 
-        {/* Status Badge */}
+        {/* Status Badge - Pushed to the end if needed, but gap handles it */}
         {status && (
-          <div className={`shrink-0 md:w-28 flex items-center justify-center gap-1.5 text-xs md:text-sm font-semibold py-1 rounded-md ${status.isPositive ? 'bg-green-50 text-green-600 md:bg-transparent' : 'bg-red-50 text-red-500 md:bg-transparent'}`}>
+          <div className={`shrink-0 md:w-28 flex items-center justify-end md:justify-center gap-1.5 text-xs md:text-sm font-semibold py-1 rounded-md ${status.isPositive ? 'text-green-600' : 'text-red-500'}`}>
              {status.isPositive ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
              <span className="hidden md:inline">{status.label}</span>
-             {/* Mobile only icon fallback if needed, or keep text */}
              <span className="md:hidden">{status.label}</span>
           </div>
         )}
       </div>
 
+      {/* Chevron */}
       <div className="absolute top-4 right-4 md:static md:pl-2 text-gray-300 group-hover:text-blue-500 transition-colors">
         <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
       </div>

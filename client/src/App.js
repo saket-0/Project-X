@@ -111,7 +111,7 @@ function App() {
     }
   };
 
-  // --- NEW: Clear Filters Function ---
+  // --- Clear Filters Function ---
   const clearFilters = () => {
     setFilters({
       availableOnly: false,
