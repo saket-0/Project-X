@@ -9,7 +9,8 @@ const FilterGroup = ({ title, options, selected, onChange }) => {
       <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
         {title}
       </h3>
-      <div className="space-y-2 max-h-48 overflow-y-auto pr-2 scrollbar-thin">
+      {/* No internal max-height; allows parent container to handle scrolling */}
+      <div className="space-y-2">
         {options.map((opt) => {
           const isSelected = selected.includes(opt);
           return (
@@ -18,7 +19,7 @@ const FilterGroup = ({ title, options, selected, onChange }) => {
               className={`flex items-center gap-2 cursor-pointer group text-sm ${isSelected ? 'text-blue-700' : 'text-gray-600'}`}
             >
               <div 
-                className={`w-4 h-4 rounded border flex items-center justify-center transition-colors
+                className={`w-4 h-4 rounded border flex items-center justify-center transition-colors flex-shrink-0
                   ${isSelected ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300 group-hover:border-blue-400'}`}
               >
                 {isSelected && <Check className="w-3 h-3 text-white" />}
@@ -29,7 +30,7 @@ const FilterGroup = ({ title, options, selected, onChange }) => {
                 checked={isSelected}
                 onChange={() => onChange(opt)}
               />
-              <span className="truncate">{opt}</span>
+              <span className="truncate leading-snug">{opt}</span>
             </label>
           );
         })}
@@ -40,17 +41,17 @@ const FilterGroup = ({ title, options, selected, onChange }) => {
 
 const FilterSidebar = ({ facets, selectedFilters, onFilterChange }) => {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 h-fit sticky top-24">
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
       <div className="flex items-center gap-2 mb-6 pb-4 border-b border-gray-100">
         <Filter className="w-4 h-4 text-blue-600" />
         <h2 className="font-bold text-gray-800">Filters</h2>
       </div>
 
-      {/* Availability Filter (Static) */}
+      {/* Availability Filter */}
       <div className="mb-6">
         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Status</h3>
         <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
-          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedFilters.availableOnly ? 'bg-green-600 border-green-600' : 'bg-white border-gray-300'}`}>
+          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors flex-shrink-0 ${selectedFilters.availableOnly ? 'bg-green-600 border-green-600' : 'bg-white border-gray-300'}`}>
             {selectedFilters.availableOnly && <Check className="w-3 h-3 text-white" />}
           </div>
           <input 

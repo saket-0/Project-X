@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Search, BookOpen, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import BookList from './components/BookList';
 import BookDetail from './components/BookDetail';
-import FilterSidebar from './components/FilterSidebar'; // Import the new component
+import FilterSidebar from './components/FilterSidebar';
 
 // Debounce Hook
 const useDebounce = (value, delay) => {
@@ -23,7 +23,7 @@ function App() {
   const [totalPages, setTotalPages] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
   
-  // --- NEW: Filter State ---
+  // Filter State
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [filters, setFilters] = useState({
     availableOnly: false,
@@ -40,8 +40,8 @@ function App() {
   const fetchBooks = useCallback(async (searchQuery, pageNum) => {
     setLoading(true);
     try {
+      // Increased limit to 50 to populate filters with more data
       const res = await axios.get(`http://localhost:5001/api/books`, {
-        // Increased limit to 50 so filters have more data to work with on the client side
         params: { search: searchQuery, page: pageNum, limit: 50 } 
       });
       setBooks(res.data.data);
@@ -65,8 +65,9 @@ function App() {
     fetchBooks(debouncedSearch, page);
   }, [page, fetchBooks, debouncedSearch]);
 
+  // --- Filter Logic ---
 
-  // --- NEW: Derive Filter Options from current data ---
+  // 1. Extract unique values from current book list
   const facets = useMemo(() => {
     const authors = new Set();
     const pubs = new Set();
@@ -85,7 +86,7 @@ function App() {
     };
   }, [books]);
 
-  // --- NEW: Handle Filter Changes ---
+  // 2. Handle user checkbox clicks
   const handleFilterChange = (category, value) => {
     if (category === 'availableOnly') {
       setFilters(prev => ({ ...prev, availableOnly: value }));
@@ -100,33 +101,31 @@ function App() {
     }
   };
 
-  // --- NEW: Apply Filters to Displayed List ---
+  // 3. Filter the displayed books
   const filteredBooks = useMemo(() => {
     return books.filter(book => {
-      // 1. Availability
+      // Availability
       if (filters.availableOnly) {
         const isAvailable = book.Status && book.Status.toLowerCase().includes('available');
         if (!isAvailable) return false;
       }
-      // 2. Authors
+      // Authors
       if (filters.authors.length > 0 && !filters.authors.includes(book.Author)) return false;
-      // 3. Publications
+      // Publications
       if (filters.pubs.length > 0 && !filters.pubs.includes(book.Pub)) return false;
-      // 4. Shelves
+      // Shelves
       if (filters.shelves.length > 0 && !filters.shelves.includes(book.Shelf)) return false;
 
       return true;
     });
   }, [books, filters]);
 
-
   return (
-    // Main background
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-20">
       
       {/* Sticky Header */}
       <header className="bg-white shadow-sm sticky top-0 z-20 border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-4"> {/* Increased max-width */}
+        <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div 
               className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
@@ -138,6 +137,7 @@ function App() {
               <h1 className="text-xl font-bold text-gray-900 tracking-tight">Project X Library</h1>
             </div>
             
+            {/* Only show search if not in detail view */}
             {!selectedBookGroup && (
               <div className="flex gap-3 w-full md:w-auto">
                 {/* Mobile Filter Toggle */}
@@ -147,7 +147,7 @@ function App() {
                 >
                   <SlidersHorizontal className="w-5 h-5 text-gray-600" />
                 </button>
-                
+
                 <div className="relative w-full md:w-96">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input 
@@ -164,20 +164,31 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8"> {/* Increased max-width to 7xl for sidebar room */}
+      <main className="max-w-7xl mx-auto px-4 py-8">
         
         {selectedBookGroup ? (
-          // --- Detail View (Full Width) ---
+          // --- Detail View ---
           <BookDetail 
             bookGroup={selectedBookGroup} 
             onBack={() => setSelectedBookGroup(null)} 
           />
         ) : (
           // --- List View (With Sidebar) ---
-          <div className="flex flex-col md:flex-row gap-8 items-start">
+          <div className="flex flex-col md:flex-row gap-8 items-start relative">
             
-            {/* --- LEFT SIDEBAR --- */}
-            <aside className={`w-full md:w-64 flex-shrink-0 ${showMobileFilters ? 'block' : 'hidden md:block'}`}>
+            {/* --- LEFT SIDEBAR --- 
+                - sticky top-24: Sticks below the header
+                - h-[calc(100vh-8rem)]: Limits height to viewport so it doesn't overflow screen
+                - overflow-y-auto: Adds personal scrollbar for filter content
+            */}
+            <aside className={`
+              w-full md:w-64 flex-shrink-0 
+              sticky top-24 
+              h-[calc(100vh-8rem)] 
+              overflow-y-auto 
+              scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent
+              ${showMobileFilters ? 'block' : 'hidden md:block'}
+            `}>
               <FilterSidebar 
                 facets={facets} 
                 selectedFilters={filters} 
@@ -186,7 +197,7 @@ function App() {
             </aside>
 
             {/* --- RIGHT CONTENT (The List) --- */}
-            <div className="flex-1 w-full min-w-0"> {/* min-w-0 prevents flex child overflow */}
+            <div className="flex-1 w-full min-w-0">
               <div className="mb-6 flex justify-between items-end">
                  <div>
                    <h2 className="text-2xl font-bold text-gray-900">Library Catalog</h2>
