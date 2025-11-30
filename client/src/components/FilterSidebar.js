@@ -1,28 +1,24 @@
 import React from 'react';
 import { Filter, Check, MapPin, User, Book, Layers, Grid3X3, X } from 'lucide-react';
 
+// Sub-component for individual filter groups (Authors, Floors, etc.)
 const FilterGroup = ({ title, options, selected, onChange, icon: Icon, variant = 'list' }) => {
   if (!options || options.length === 0) return null;
 
   const isGrid = variant === 'grid';
 
   return (
-    <div className="mb-5"> {/* Reduced bottom margin for tighter spacing */}
-      <div className="flex items-center gap-2 mb-2"> {/* Reduced header margin */}
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
         {Icon && <Icon className="w-3.5 h-3.5 text-blue-600" />}
-        {/* Fixed Color: Changed to text-gray-900 for high contrast matching others */}
         <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
           {title}
         </h3>
       </div>
       
       {isGrid ? (
-        /* FIXED GRID LAYOUT:
-           - flex flex-wrap: Allows items to wrap naturally.
-           - justify-center: Keeps the whole block centered in the sidebar.
-           - w-11: Fixed width for every button ensures perfect uniformity.
-        */
-        <div className="flex flex-wrap justify-center gap-2">
+        /* Grid Layout for Rack Numbers */
+        <div className="flex flex-wrap gap-2">
           {options.map((opt) => {
             const isSelected = selected.includes(opt);
             return (
@@ -36,7 +32,7 @@ const FilterGroup = ({ title, options, selected, onChange, icon: Icon, variant =
                     ? 'bg-blue-600 border-blue-600 text-white shadow-sm' 
                     : 'bg-white border-gray-200 text-gray-600 hover:border-blue-400 hover:text-blue-600'}
                 `}
-                title={opt}
+                title={`Rack ${opt}`}
               >
                 {opt}
               </button>
@@ -44,7 +40,8 @@ const FilterGroup = ({ title, options, selected, onChange, icon: Icon, variant =
           })}
         </div>
       ) : (
-        <div className="space-y-1.5">
+        /* List Layout for Authors, Floors, etc. */
+        <div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 pr-1">
           {options.map((opt) => {
             const isSelected = selected.includes(opt);
             return (
@@ -97,7 +94,6 @@ const FilterSidebar = ({ facets, selectedFilters, onFilterChange, onClearFilters
 
       {/* Availability Filter */}
       <div className="mb-6">
-        {/* Fixed Color: text-gray-900 */}
         <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2">Status</h3>
         <label className="flex items-center gap-3 cursor-pointer text-sm text-gray-700 group">
           <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all flex-shrink-0 ${selectedFilters.availableOnly ? 'bg-green-600 border-green-600' : 'bg-white border-gray-300 group-hover:border-green-500'}`}>
@@ -138,14 +134,6 @@ const FilterSidebar = ({ facets, selectedFilters, onFilterChange, onClearFilters
           onChange={(val) => onFilterChange('racks', val)}
           variant="grid" 
           icon={Grid3X3}
-        />
-
-        <FilterGroup 
-          title="Column" 
-          options={facets.cols} 
-          selected={selectedFilters.cols}
-          onChange={(val) => onFilterChange('cols', val)}
-          variant="grid"
         />
       </div>
 

@@ -1,5 +1,9 @@
+/**
+ * server/src/controllers/bookController.js
+ * ROBUST ENGINE: Handles Search, Filtering, and Facet Generation
+ */
 const Book = require('../models/Book');
-const { parseShelf } = require('../utils/shelfUtils'); // Ensure this import is correct based on your folder structure
+const { parseShelf } = require('../utils/shelfUtils'); 
 
 const searchBooks = async (req, res) => {
     try {
@@ -7,7 +11,6 @@ const searchBooks = async (req, res) => {
             page = 1, 
             limit = 50, 
             search = '',
-            // Destructure filter params from query
             availableOnly,
             authors,
             pubs,
@@ -15,86 +18,119 @@ const searchBooks = async (req, res) => {
             racks,
             cols
         } = req.query;
-        
-        // 1. Base Query
+
+        // --- 1. BUILD BASE QUERY (Search & Metadata) ---
+        // We filter by Text, Availability, Author, Publisher FIRST.
+        // We DO NOT filter by Location yet, so we can generate Facets for ALL locations.
         let query = {};
-        
-        // 2. Text Search (Smart Search)
+
+        // A. Smart Search (Title, Author, Tags)
         if (search) {
+            const regex = { $regex: search, $options: 'i' };
             query.$or = [
-                { title: { $regex: search, $options: 'i' } },
-                { author: { $regex: search, $options: 'i' } },
-                { tags: { $regex: search, $options: 'i' } }
+                { title: regex },
+                { author: regex },
+                { tags: regex }
             ];
         }
 
-        // 3. Apply Filters (Server-Side)
-        
-        // Availability
+        // B. Availability
         if (availableOnly === 'true') {
             query.status = { $regex: 'available', $options: 'i' };
         }
 
-        // Arrays (Authors, Publishers) - check if provided and not empty
-        if (authors) {
-            const authorList = Array.isArray(authors) ? authors : [authors];
-            query.author = { $in: authorList };
-        }
-        
-        if (pubs) {
-            const pubList = Array.isArray(pubs) ? pubs : [pubs];
-            query.publisher = { $in: pubList };
-        }
+        // C. Metadata Filters (Exact Match)
+        // Helper to handle array vs string params
+        const toArray = (val) => val ? (Array.isArray(val) ? val : [val]) : [];
+        const filterAuthors = toArray(authors);
+        const filterPubs = toArray(pubs);
 
-        // Location Filters (Complex because location is a string in DB)
-        // Ideally, you should normalize your DB, but here is the logic for now:
-        // We might need to filter these in memory if the DB schema is just a string, 
-        // OR use regex if the format is strict. 
-        // For performance, let's assume we filter basic fields in DB, 
-        // but complex parsed fields might need aggregation or strict regex.
-        
-        // *Note: Deep filtering on parsed strings (like Rack 42 inside 'IF-R42...') 
-        // is slow in MongoDB regex. For this refactor, we will stick to basic filtering.*
+        if (filterAuthors.length > 0) query.author = { $in: filterAuthors };
+        if (filterPubs.length > 0) query.publisher = { $in: filterPubs };
 
-        // Execute Query
-        const totalResults = await Book.countDocuments(query);
-        const books = await Book.find(query)
-            .skip((parseInt(page) - 1) * parseInt(limit))
-            .limit(parseInt(limit));
+        // --- 2. FETCH ALL MATCHING DOCUMENTS (Lightweight) ---
+        // We fetch ALL matches (not just page 1) to build accurate Facets.
+        // We only fetch fields needed for filtering to keep it fast.
+        const allMatches = await Book.find(query)
+            .select('title author publisher status location shelf callNumber tags coverImage')
+            .lean();
 
-        // 4. Transform Data (Enrich with Parsed Location)
-        // This removes the need for client-side shelfUtils
-        const enrichedBooks = books.map(book => {
-            const bookObj = book.toObject();
+        // --- 3. PROCESS & PARSE LOCATIONS ---
+        const processedBooks = allMatches.map(book => {
+            // Robust Fallback: Try 'location' -> 'Shelf' -> 'callNumber'
+            const rawLoc = book.location || book.Shelf || book.callNumber || '';
             return {
-                ...bookObj,
-                parsedLocation: parseShelf(bookObj.shelf || bookObj.location || '')
+                ...book,
+                // Attach the parsed object (floorLabel, rack, etc.)
+                parsedLocation: parseShelf(rawLoc)
             };
         });
 
-        // 5. Apply Strict Location Filters (Post-Fetch for precision if regex is too hard)
-        // Note: For large datasets, move this logic to MongoDB Aggregation pipeline.
-        let finalBooks = enrichedBooks;
-        if (floors || racks || cols) {
-             const floorList = floors ? (Array.isArray(floors) ? floors : [floors]) : [];
-             const rackList = racks ? (Array.isArray(racks) ? racks : [racks]) : [];
-             
-             finalBooks = enrichedBooks.filter(b => {
-                 if (!b.parsedLocation) return false;
-                 if (floorList.length && !floorList.includes(b.parsedLocation.floorLabel)) return false;
-                 if (rackList.length && !rackList.includes(String(b.parsedLocation.rack))) return false;
-                 return true;
-             });
-        }
+        // --- 4. CALCULATE FACETS (Dynamic Filter Options) ---
+        // This generates the options for the sidebar based on the Search Results
+        const facets = {
+            authors: new Set(),
+            pubs: new Set(),
+            floors: new Set(),
+            racks: new Set(),
+            cols: new Set()
+        };
 
+        processedBooks.forEach(b => {
+            if (b.author) facets.authors.add(b.author);
+            if (b.publisher) facets.pubs.add(b.publisher);
+            if (b.parsedLocation) {
+                facets.floors.add(b.parsedLocation.floorLabel);
+                // Store simple numbers/strings for racks
+                facets.racks.add(b.parsedLocation.rack);
+                facets.cols.add(b.parsedLocation.col);
+            }
+        });
+
+        // --- 5. APPLY LOCATION FILTERS (The "Side Filter" Logic) ---
+        const selectedFloors = toArray(floors);
+        const selectedRacks = toArray(racks); // These come as strings from query
+        const selectedCols = toArray(cols);
+
+        const filteredBooks = processedBooks.filter(book => {
+            // If no location filters are set, keep everything
+            if (selectedFloors.length === 0 && selectedRacks.length === 0 && selectedCols.length === 0) return true;
+
+            // If filters are set but book has no location, drop it
+            if (!book.parsedLocation) return false;
+
+            // Check Floor
+            if (selectedFloors.length > 0 && !selectedFloors.includes(book.parsedLocation.floorLabel)) return false;
+            
+            // Check Rack (Compare as String to be safe)
+            if (selectedRacks.length > 0 && !selectedRacks.includes(String(book.parsedLocation.rack))) return false;
+
+            return true;
+        });
+
+        // --- 6. PAGINATION ---
+        const totalResults = filteredBooks.length;
+        const currentPage = parseInt(page);
+        const limitNum = parseInt(limit);
+        const startIndex = (currentPage - 1) * limitNum;
+        const paginatedData = filteredBooks.slice(startIndex, startIndex + limitNum);
+
+        // --- 7. RESPONSE ---
         res.json({
             meta: {
                 totalResults,
-                currentPage: parseInt(page),
-                totalPages: Math.ceil(totalResults / parseInt(limit)),
-                limit: parseInt(limit)
+                currentPage,
+                totalPages: Math.ceil(totalResults / limitNum),
+                limit: limitNum
             },
-            data: finalBooks
+            facets: {
+                authors: Array.from(facets.authors).sort(),
+                pubs: Array.from(facets.pubs).sort(),
+                floors: Array.from(facets.floors).sort(),
+                racks: Array.from(facets.racks).sort((a, b) => a - b), // Numeric Sort
+                cols: Array.from(facets.cols).sort((a, b) => a - b)
+            },
+            data: paginatedData
         });
 
     } catch (error) {

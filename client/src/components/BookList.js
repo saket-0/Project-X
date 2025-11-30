@@ -6,11 +6,12 @@ const BookList = ({ books, onBookClick }) => {
   return (
     <div className="space-y-3">
       {books.map((book, index) => {
-        // We can now trust the Mongo Schema keys (lowercase)
-        // If parsedLocation exists (from our new Controller), use it!
-        const shelfDisplay = book.parsedLocation 
-            ? `${book.parsedLocation.floorLabel} - Rack ${book.parsedLocation.rack}`
-            : (book.shelf || book.location || "N/A");
+        // --- FIX STARTS HERE ---
+        // Problem: properly rendering 'parsedLocation' failed because the backend regex was strict.
+        // Solution: Use the raw 'location' field, which we now guarantee is clean (e.g. "IIF-R48...")
+        // This matches exactly what works in your BookDetail.js
+        const shelfDisplay = book.location || book.shelf || "Processing...";
+        // --- FIX ENDS HERE ---
 
         const isAvailable = book.status ? book.status.toLowerCase().includes('available') : false;
 
@@ -32,7 +33,7 @@ const BookList = ({ books, onBookClick }) => {
             stats={[
               { 
                 icon: Layers, 
-                value: '1 Copy', // Simplified unless you actually track copies
+                value: '1 Copy', 
                 subLabel: 'In Library' 
               },
               { 
