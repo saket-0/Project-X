@@ -1,46 +1,44 @@
-const { getBooks } = require('../models/libraryModel');
-const { groupBooksByTitle } = require('../utils/bookGrouping');
+const Book = require('../models/Book'); // Import your new model
 
 const searchBooks = async (req, res) => {
     try {
-        const allBooks = await getBooks();
+        const { page = 1, limit = 20, search = '' } = req.query;
         
-        // 1. Filter raw data first
-        let { page = 1, limit = 20, search = '' } = req.query;
-        page = parseInt(page);
-        limit = parseInt(limit);
-        const lowerSearch = search.toLowerCase();
-
-        let filteredBooks = allBooks;
+        let query = {};
+        
+        // The Smart Search Logic
         if (search) {
-            filteredBooks = allBooks.filter(book => 
-                (book.Title && book.Title.toLowerCase().includes(lowerSearch)) ||
-                (book.Author && book.Author.toLowerCase().includes(lowerSearch))
-            );
+            query = { 
+                $or: [
+                    // Standard: Search Title
+                    { title: { $regex: search, $options: 'i' } },
+                    // Standard: Search Author
+                    { author: { $regex: search, $options: 'i' } },
+                    // SMART: Search the TAGS array we just generated
+                    { tags: { $regex: search, $options: 'i' } }
+                ]
+            };
         }
 
-        // 2. Apply the Grouping Logic (Modularized)
-        // This ensures the frontend only receives unique titles
-        const groupedBooks = groupBooksByTitle(filteredBooks);
+        // Execute Query on MongoDB
+        const books = await Book.find(query)
+            .skip((page - 1) * parseInt(limit))
+            .limit(parseInt(limit));
 
-        // 3. Paginate the *Groups* (not the individual rows)
-        const totalResults = groupedBooks.length;
-        const startIndex = (page - 1) * limit;
-        const endIndex = page * limit;
-        const paginatedGroups = groupedBooks.slice(startIndex, endIndex);
+        const totalResults = await Book.countDocuments(query);
 
         res.json({
             meta: {
                 totalResults,
-                currentPage: page,
-                totalPages: Math.ceil(totalResults / limit),
-                limit
+                currentPage: parseInt(page),
+                totalPages: Math.ceil(totalResults / parseInt(limit)),
+                limit: parseInt(limit)
             },
-            data: paginatedGroups
+            data: books
         });
 
     } catch (error) {
-        console.error("Controller Error:", error);
+        console.error("Search Error:", error);
         res.status(500).json({ error: "Internal Server Error" });
     }
 };
