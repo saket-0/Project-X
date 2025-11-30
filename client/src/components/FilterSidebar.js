@@ -1,5 +1,5 @@
 import React from 'react';
-import { Filter, Check, MapPin, User, Book, Layers, Grid3X3 } from 'lucide-react';
+import { Filter, Check, MapPin, User, Book, Layers, Grid3X3, X } from 'lucide-react';
 
 const FilterGroup = ({ title, options, selected, onChange, icon: Icon, variant = 'list' }) => {
   if (!options || options.length === 0) return null;
@@ -68,20 +68,28 @@ const FilterGroup = ({ title, options, selected, onChange, icon: Icon, variant =
   );
 };
 
-const FilterSidebar = ({ facets, selectedFilters, onFilterChange }) => {
+const FilterSidebar = ({ facets, selectedFilters, onFilterChange, onClearFilters }) => {
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 min-h-full">
       
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-6 pb-4 border-b border-gray-100">
-        <Filter className="w-4 h-4 text-blue-600" />
-        <h2 className="font-bold text-gray-800">Filters</h2>
+      {/* Header with Clear Button */}
+      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-blue-600" />
+          <h2 className="font-bold text-gray-800">Filters</h2>
+        </div>
+        
+        <button 
+          onClick={onClearFilters}
+          className="text-xs font-medium text-gray-400 hover:text-blue-600 transition-colors flex items-center gap-1"
+        >
+          <X className="w-3 h-3" />
+          Clear
+        </button>
       </div>
 
       {/* Availability Filter */}
-      {/* FIX 1: Reduced mb-8 to mb-6 to tighten spacing */}
       <div className="mb-6">
-        {/* FIX 2: Changed text-gray-400 to text-gray-500 to match other headers */}
         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Status</h3>
         <label className="flex items-center gap-3 cursor-pointer text-sm text-gray-700 group">
           <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all flex-shrink-0 ${selectedFilters.availableOnly ? 'bg-green-600 border-green-600' : 'bg-white border-gray-300 group-hover:border-green-500'}`}>
@@ -101,7 +109,6 @@ const FilterSidebar = ({ facets, selectedFilters, onFilterChange }) => {
 
       {/* Location Section */}
       <div className="mb-8 pt-4 border-t border-gray-100">
-        {/* FIX 3: Removed mt-4 to remove extra gap */}
         <div className="flex items-center gap-2 mb-4">
           <MapPin className="w-4 h-4 text-blue-600" />
           <h2 className="font-bold text-gray-800 text-sm">Location</h2>

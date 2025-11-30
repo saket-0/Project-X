@@ -4,7 +4,7 @@ import { Search, BookOpen, ChevronLeft, ChevronRight, SlidersHorizontal } from '
 import BookList from './components/BookList';
 import BookDetail from './components/BookDetail';
 import FilterSidebar from './components/FilterSidebar';
-import { parseShelf } from './utils/shelfUtils'; // Import the helper
+import { parseShelf } from './utils/shelfUtils';
 
 // Debounce Hook
 const useDebounce = (value, delay) => {
@@ -24,20 +24,20 @@ function App() {
   const [totalPages, setTotalPages] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
   
-  // Filter State
+  // Filter Layout State
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   
-  // UPDATED: split locations into specific pieces
+  // Filter Selection State
   const [filters, setFilters] = useState({
     availableOnly: false,
     authors: [],
     pubs: [],
-    floors: [],
-    racks: [],
-    cols: []
+    floors: [], 
+    racks: [],  
+    cols: []    
   });
 
-  // Selection State
+  // Selection State for Detail View
   const [selectedBookGroup, setSelectedBookGroup] = useState(null);
 
   const debouncedSearch = useDebounce(searchTerm, 500);
@@ -69,7 +69,6 @@ function App() {
 
   // --- Filter Logic ---
 
-  // 1. Extract unique values from current book list
   const facets = useMemo(() => {
     const authors = new Set();
     const pubs = new Set();
@@ -81,12 +80,11 @@ function App() {
       if(b.Author) authors.add(b.Author);
       if(b.Pub) pubs.add(b.Pub);
       
-      // Parse Shelf location
       const loc = parseShelf(b.Shelf);
       if (loc) {
-        floors.add(loc.floorLabel);
-        racks.add(loc.rack); // Add number directly
-        cols.add(loc.col);
+        floors.add(loc.floorLabel); 
+        racks.add(loc.rack);        
+        cols.add(loc.col);          
       }
     });
 
@@ -94,13 +92,11 @@ function App() {
       authors: Array.from(authors).sort(),
       pubs: Array.from(pubs).sort(),
       floors: Array.from(floors).sort(),
-      // Sort numbers numerically, not alphabetically
       racks: Array.from(racks).sort((a, b) => a - b),
       cols: Array.from(cols).sort((a, b) => a - b)
     };
   }, [books]);
 
-  // 2. Handle user checkbox clicks
   const handleFilterChange = (category, value) => {
     if (category === 'availableOnly') {
       setFilters(prev => ({ ...prev, availableOnly: value }));
@@ -115,25 +111,31 @@ function App() {
     }
   };
 
-  // 3. Filter the displayed books
+  // --- NEW: Clear Filters Function ---
+  const clearFilters = () => {
+    setFilters({
+      availableOnly: false,
+      authors: [],
+      pubs: [],
+      floors: [],
+      racks: [],
+      cols: []
+    });
+  };
+
   const filteredBooks = useMemo(() => {
     return books.filter(book => {
-      // Availability
       if (filters.availableOnly) {
         const isAvailable = book.Status && book.Status.toLowerCase().includes('available');
         if (!isAvailable) return false;
       }
       
-      // Standard Text Filters
       if (filters.authors.length > 0 && !filters.authors.includes(book.Author)) return false;
       if (filters.pubs.length > 0 && !filters.pubs.includes(book.Pub)) return false;
 
-      // Location Parsed Filters
-      // If any location filter is active, we must parse the book's shelf
       if (filters.floors.length > 0 || filters.racks.length > 0 || filters.cols.length > 0) {
         const loc = parseShelf(book.Shelf);
         
-        // If book has no valid location but we are filtering by location, exclude it
         if (!loc) return false;
 
         if (filters.floors.length > 0 && !filters.floors.includes(loc.floorLabel)) return false;
@@ -195,7 +197,6 @@ function App() {
         ) : (
           <div className="flex flex-col md:flex-row gap-8 items-start relative">
             
-            {/* Sidebar */}
             <aside className={`
               w-full md:w-64 flex-shrink-0 
               sticky top-24 
@@ -204,14 +205,15 @@ function App() {
               scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent
               ${showMobileFilters ? 'block' : 'hidden md:block'}
             `}>
+              {/* Pass the clearFilters function here */}
               <FilterSidebar 
                 facets={facets} 
                 selectedFilters={filters} 
-                onFilterChange={handleFilterChange} 
+                onFilterChange={handleFilterChange}
+                onClearFilters={clearFilters}
               />
             </aside>
 
-            {/* Main Content */}
             <div className="flex-1 w-full min-w-0">
               <div className="mb-6 flex justify-between items-end">
                  <div>
