@@ -25,33 +25,50 @@ const startEngine = async () => {
         let processed = 0;
         let batch = [];
 
+        console.log('\nProcessing Books (Legend: G=Google, O=OpenLib, L=Local)\n' + '-'.repeat(60));
+
         const tasks = uniqueBooks.map(book => limit(async () => {
-            // Enrich
+            // Step A: Enrich (Fetch Metadata)
             const enriched = await enrichBook(book);
-            // Tag
+            
+            // Step B: Tag (NLP & Keywords)
             enriched.tags = generateTags(book, enriched.metaData);
             
+            // Step C: Add to Batch
             batch.push(enriched);
             processed++;
 
-            // Write Batch
+            // VISUAL FEEDBACK: Print source character
+            const sourceChar = enriched.source === 'Google' ? 'G' 
+                             : enriched.source === 'OpenLib' ? 'O' 
+                             : 'L';
+            
+            process.stdout.write(sourceChar);
+
+            // Step D: Write Batch to DB when full
             if (batch.length >= config.batchSize) {
                 await writeBatch(batch);
                 batch = []; // Clear batch
-                process.stdout.write(`\r [${processed}/${uniqueBooks.length}] Books Processed...`);
+                
+                // Print progress status on a new line to keep things tidy
+                console.log(`  [${processed}/${uniqueBooks.length}]`); 
             }
         }));
 
+        // Wait for all concurrent tasks to finish
         await Promise.all(tasks);
 
-        // Final Batch
-        if (batch.length > 0) await writeBatch(batch);
+        // Final Batch (Write any remaining books)
+        if (batch.length > 0) {
+            await writeBatch(batch);
+            console.log(`  [${processed}/${uniqueBooks.length}]`); 
+        }
 
-        console.log(`\n\n🎉 Seeding Complete! Processed ${processed} books.`);
+        console.log(`\n\n🎉 Seeding Complete! Successfully processed ${processed} books.`);
         process.exit(0);
 
     } catch (err) {
-        console.error("❌ Engine Failure:", err);
+        console.error("\n❌ Engine Failure:", err);
         process.exit(1);
     }
 };

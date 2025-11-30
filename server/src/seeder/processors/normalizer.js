@@ -2,22 +2,25 @@ const normalizeData = (rawRows) => {
     const uniqueBooksMap = new Map();
 
     rawRows.forEach(row => {
-        const title = row.Title || 'Unknown';
-        const author = row.Author || '';
-        // Create a unique key (lowercase, alphanumeric only)
+        const title = row.Title ? row.Title.trim() : 'Unknown';
+        
+        // FIX: Clean the author name (Remove 'By:', 'Dr.', etc.)
+        let author = row.Author || '';
+        author = author.replace(/By:|Dr\.|Prof\.|Mr\.|Mrs\./gi, '').trim();
+
+        // Create a unique key
         const key = (title + author).toLowerCase().replace(/[^\w]/g, '');
 
         if (!uniqueBooksMap.has(key)) {
             uniqueBooksMap.set(key, {
                 rawTitle: title,
-                rawAuthor: author,
+                rawAuthor: author, // Now clean!
                 locations: new Set(),
                 originalId: row.BiblioID,
                 localPubDate: row.Pub
             });
         }
         
-        // Aggregate locations/call numbers
         if (row.CallNo) uniqueBooksMap.get(key).locations.add(row.CallNo);
     });
 
