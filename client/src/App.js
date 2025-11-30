@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
-import { Search, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, BookOpen, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import BookList from './components/BookList';
 import BookDetail from './components/BookDetail';
+import FilterSidebar from './components/FilterSidebar'; // Import the new component
 
 // Debounce Hook
 const useDebounce = (value, delay) => {
@@ -22,6 +23,15 @@ function App() {
   const [totalPages, setTotalPages] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
   
+  // --- NEW: Filter State ---
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    availableOnly: false,
+    authors: [],
+    pubs: [],
+    shelves: []
+  });
+
   // Selection State
   const [selectedBookGroup, setSelectedBookGroup] = useState(null);
 
@@ -31,7 +41,8 @@ function App() {
     setLoading(true);
     try {
       const res = await axios.get(`http://localhost:5001/api/books`, {
-        params: { search: searchQuery, page: pageNum, limit: 10 } // Lower limit for list view
+        // Increased limit to 50 so filters have more data to work with on the client side
+        params: { search: searchQuery, page: pageNum, limit: 50 } 
       });
       setBooks(res.data.data);
       setTotalPages(res.data.meta.totalPages);
@@ -54,11 +65,68 @@ function App() {
     fetchBooks(debouncedSearch, page);
   }, [page, fetchBooks, debouncedSearch]);
 
+
+  // --- NEW: Derive Filter Options from current data ---
+  const facets = useMemo(() => {
+    const authors = new Set();
+    const pubs = new Set();
+    const shelves = new Set();
+
+    books.forEach(b => {
+      if(b.Author) authors.add(b.Author);
+      if(b.Pub) pubs.add(b.Pub);
+      if(b.Shelf) shelves.add(b.Shelf);
+    });
+
+    return {
+      authors: Array.from(authors).sort(),
+      pubs: Array.from(pubs).sort(),
+      shelves: Array.from(shelves).sort()
+    };
+  }, [books]);
+
+  // --- NEW: Handle Filter Changes ---
+  const handleFilterChange = (category, value) => {
+    if (category === 'availableOnly') {
+      setFilters(prev => ({ ...prev, availableOnly: value }));
+    } else {
+      setFilters(prev => {
+        const current = prev[category];
+        const updated = current.includes(value)
+          ? current.filter(item => item !== value)
+          : [...current, value];
+        return { ...prev, [category]: updated };
+      });
+    }
+  };
+
+  // --- NEW: Apply Filters to Displayed List ---
+  const filteredBooks = useMemo(() => {
+    return books.filter(book => {
+      // 1. Availability
+      if (filters.availableOnly) {
+        const isAvailable = book.Status && book.Status.toLowerCase().includes('available');
+        if (!isAvailable) return false;
+      }
+      // 2. Authors
+      if (filters.authors.length > 0 && !filters.authors.includes(book.Author)) return false;
+      // 3. Publications
+      if (filters.pubs.length > 0 && !filters.pubs.includes(book.Pub)) return false;
+      // 4. Shelves
+      if (filters.shelves.length > 0 && !filters.shelves.includes(book.Shelf)) return false;
+
+      return true;
+    });
+  }, [books, filters]);
+
+
   return (
+    // Main background
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-20">
+      
       {/* Sticky Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-10 border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 py-4">
+      <header className="bg-white shadow-sm sticky top-0 z-20 border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 py-4"> {/* Increased max-width */}
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div 
               className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
@@ -70,76 +138,101 @@ function App() {
               <h1 className="text-xl font-bold text-gray-900 tracking-tight">Project X Library</h1>
             </div>
             
-            {/* Only show search if not in detail view */}
             {!selectedBookGroup && (
-              <div className="relative w-full md:w-96">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input 
-                  type="text"
-                  placeholder="Search by Title or Author..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+              <div className="flex gap-3 w-full md:w-auto">
+                {/* Mobile Filter Toggle */}
+                <button 
+                  className="md:hidden p-2.5 bg-gray-100 rounded-xl hover:bg-gray-200"
+                  onClick={() => setShowMobileFilters(!showMobileFilters)}
+                >
+                  <SlidersHorizontal className="w-5 h-5 text-gray-600" />
+                </button>
+                
+                <div className="relative w-full md:w-96">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input 
+                    type="text"
+                    placeholder="Search by Title or Author..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
               </div>
             )}
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-8"> {/* Increased max-width to 7xl for sidebar room */}
         
         {selectedBookGroup ? (
-          // --- Detail View ---
+          // --- Detail View (Full Width) ---
           <BookDetail 
             bookGroup={selectedBookGroup} 
             onBack={() => setSelectedBookGroup(null)} 
           />
         ) : (
-          // --- List View ---
-          <>
-            <div className="mb-6 flex justify-between items-end">
-               <div>
-                 <h2 className="text-2xl font-bold text-gray-900">Library Catalog</h2>
-                 <p className="text-gray-500 text-sm mt-1">Showing {books.length} distinct titles from {totalResults} total</p>
-               </div>
-               <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
-                 Page {page} of {totalPages}
-               </span>
-            </div>
-
-            {loading ? (
-              <div className="flex flex-col items-center justify-center py-20 space-y-4">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
-                <p className="text-gray-400 animate-pulse">Searching catalog...</p>
-              </div>
-            ) : (
-              <BookList 
-                books={books} 
-                onBookClick={setSelectedBookGroup} 
+          // --- List View (With Sidebar) ---
+          <div className="flex flex-col md:flex-row gap-8 items-start">
+            
+            {/* --- LEFT SIDEBAR --- */}
+            <aside className={`w-full md:w-64 flex-shrink-0 ${showMobileFilters ? 'block' : 'hidden md:block'}`}>
+              <FilterSidebar 
+                facets={facets} 
+                selectedFilters={filters} 
+                onFilterChange={handleFilterChange} 
               />
-            )}
+            </aside>
 
-            {/* Pagination */}
-            {!loading && books.length > 0 && (
-              <div className="mt-10 flex justify-center gap-3">
-                <button 
-                  disabled={page === 1}
-                  onClick={() => setPage(p => p - 1)}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium text-gray-700"
-                >
-                  <ChevronLeft className="w-4 h-4" /> Previous
-                </button>
-                <button 
-                  disabled={page === totalPages}
-                  onClick={() => setPage(p => p + 1)}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium text-gray-700"
-                >
-                  Next <ChevronRight className="w-4 h-4" />
-                </button>
+            {/* --- RIGHT CONTENT (The List) --- */}
+            <div className="flex-1 w-full min-w-0"> {/* min-w-0 prevents flex child overflow */}
+              <div className="mb-6 flex justify-between items-end">
+                 <div>
+                   <h2 className="text-2xl font-bold text-gray-900">Library Catalog</h2>
+                   <p className="text-gray-500 text-sm mt-1">
+                     Showing {filteredBooks.length} visible results 
+                     {searchTerm && ` for "${searchTerm}"`}
+                   </p>
+                 </div>
+                 <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
+                   Page {page} of {totalPages}
+                 </span>
               </div>
-            )}
-          </>
+
+              {loading ? (
+                <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+                  <p className="text-gray-400 animate-pulse">Searching catalog...</p>
+                </div>
+              ) : (
+                <BookList 
+                  books={filteredBooks} 
+                  onBookClick={setSelectedBookGroup} 
+                />
+              )}
+
+              {/* Pagination */}
+              {!loading && books.length > 0 && (
+                <div className="mt-10 flex justify-center gap-3">
+                  <button 
+                    disabled={page === 1}
+                    onClick={() => setPage(p => p - 1)}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium text-gray-700"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Previous
+                  </button>
+                  <button 
+                    disabled={page === totalPages}
+                    onClick={() => setPage(p => p + 1)}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium text-gray-700"
+                  >
+                    Next <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </main>
     </div>
