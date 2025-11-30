@@ -1,24 +1,25 @@
 const fs = require('fs');
-const path = require('path');
 const csv = require('csv-parser');
 
-const loadAllCsvs = async (folderPath) => {
-    if (!fs.existsSync(folderPath)) throw new Error(`Data folder missing: ${folderPath}`);
-    
-    const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.csv'));
-    console.log(`📂 Found ${files.length} CSV files.`);
+/**
+ * Loads a single CSV file into an array of row objects.
+ * @param {string} filePath - Path to the .csv file
+ * @returns {Promise<Array>}
+ */
+const loadCsv = (filePath) => {
+    return new Promise((resolve, reject) => {
+        const results = [];
+        
+        if (!fs.existsSync(filePath)) {
+            return reject(new Error(`File not found: ${filePath}`));
+        }
 
-    const allRows = [];
-    for (const file of files) {
-        const filePath = path.join(folderPath, file);
-        await new Promise((resolve) => {
-            fs.createReadStream(filePath)
-                .pipe(csv())
-                .on('data', (row) => allRows.push(row))
-                .on('end', resolve);
-        });
-    }
-    return allRows;
+        fs.createReadStream(filePath)
+            .pipe(csv())
+            .on('data', (data) => results.push(data))
+            .on('end', () => resolve(results))
+            .on('error', (error) => reject(error));
+    });
 };
 
-module.exports = { loadAllCsvs };
+module.exports = { loadCsv };

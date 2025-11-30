@@ -1,47 +1,50 @@
 /**
  * server/src/seeder/processors/normalizer.js
- * FIX: Now explicitly prioritizes the 'Shelf' column and sanitizes bad data.
+ * REDESIGNED: cleans "By:", "Browse shelf", and standardizes text.
  */
-const normalizeData = (rawRows) => {
-    const uniqueBooksMap = new Map();
+const normalizeBook = (book) => {
+    let { title, rawAuthor, publisher, callNumber, location, status } = book;
 
-    rawRows.forEach(row => {
-        const title = row.Title ? row.Title.trim() : 'Unknown';
-        
-        // Clean Author Name
-        let author = row.Author || '';
-        author = author.replace(/By:|Dr\.|Prof\.|Mr\.|Mrs\./gi, '').trim();
+    // 1. Clean Title
+    if (title) {
+        title = title.replace(/\s+/g, ' ').trim();
+    }
 
-        const key = (title + author).toLowerCase().replace(/[^\w]/g, '');
+    // 2. Clean Author (Remove "By: " prefix)
+    let author = rawAuthor || 'Unknown';
+    // Regex removes "By:", "By ", and trailing "(ED)" or similar
+    author = author.replace(/^By:\s*/i, '')
+                   .replace(/\(ED\)$/i, '')
+                   .trim();
 
-        if (!uniqueBooksMap.has(key)) {
-            uniqueBooksMap.set(key, {
-                rawTitle: title,
-                rawAuthor: author,
-                locations: new Set(),
-                originalId: row.BiblioID,
-                // We store the CallNo separately for reference, but NOT for location
-                callNumber: row.CallNo 
-            });
-        }
-        
-        // --- CRITICAL LOCATION FIX ---
-        // 1. Target the 'Shelf' column specifically
-        // 2. Fallback to 'CallNo' only if Shelf is missing (but CallNo is usually DDC, not Shelf)
-        let loc = row.Shelf || '';
+    // 3. Clean Publisher
+    if (publisher) {
+        // Extract just the company name if possible, or keep as is
+        // Example: "NEW DELHI, MACMILLAN" -> "MACMILLAN" (Optional, currently keeping full)
+        publisher = publisher.replace(/\s+/g, ' ').trim();
+    }
 
-        // 3. Strict Filter: Remove "Vellore...", "Stack", or empty/garbage data
-        if (loc && 
-            !loc.includes('Vellore') && 
-            !loc.includes('Technology') && 
-            loc.length > 2 // Filter out tiny invalid strings
-        ) {
-            uniqueBooksMap.get(key).locations.add(loc.trim());
-        }
-    });
+    // 4. Clean Call Number (Remove garbage text)
+    // Example: "620.17 RYD (Browse shelf(Opens below))" -> "620.17 RYD"
+    if (callNumber) {
+        callNumber = callNumber.split('(')[0].trim();
+    }
 
-    console.log(`📉 Normalized ${rawRows.length} rows into ${uniqueBooksMap.size} unique titles.`);
-    return Array.from(uniqueBooksMap.values());
+    // 5. Normalize Status
+    if (status) {
+        status = status.toLowerCase();
+    }
+
+    return {
+        ...book,
+        title,
+        author, // formatted author
+        publisher,
+        callNumber,
+        status,
+        // Ensure location is valid
+        location: location === 'N/A' ? '' : location
+    };
 };
 
-module.exports = { normalizeData };
+module.exports = { normalizeBook };

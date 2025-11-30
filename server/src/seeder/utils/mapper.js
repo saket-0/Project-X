@@ -1,43 +1,37 @@
 /**
  * server/src/seeder/utils/mapper.js
- * The "Contract": Ensures Data Consistency for the Frontend.
+ * REDESIGNED: Strictly maps 'vit_data_bot2.csv' columns to the Schema
  */
-const mapToStandardBook = (normalized, metaData) => {
-    // 1. Prioritize Valid Shelf Location
-    // If we have multiple copies, pick the first valid shelf code.
-    // If empty, mark as 'On Shelf' to avoid 'Rack 999' errors if parsed.
-    const shelfCodes = Array.from(normalized.locations);
-    const primaryLocation = shelfCodes.length > 0 ? shelfCodes[0] : 'Processing';
+const mapCsvToBook = (row) => {
+    // 1. Safe Extraction Helper
+    const get = (key) => (row[key] ? row[key].trim() : '');
 
-    // 2. Strict Type Enforcement
+    // 2. Map Fields
     return {
-        // Identity
-        title: metaData.title || normalized.rawTitle,
+        // Core Identity
+        title: get('Title'),
         
-        // PRIMARY DISPLAY (Must be constant types)
-        author: metaData.authors?.[0] || normalized.rawAuthor || "Unknown Author",
-        location: primaryLocation,  // This is now "IIF-R48..." NOT "Vellore..."
-        status: "Available",
+        // processing will happen in normalizer.js
+        rawAuthor: get('Author'), 
         
-        // RICH DATA
-        authors: metaData.authors || [normalized.rawAuthor],
-        publisher: metaData.publisher || "Unknown Publisher",
-        description: (metaData.description || "No description available.").substring(0, 2000),
-        tags: [], // Filled by tagger next
-        coverImage: metaData.imageLinks?.thumbnail || "",
+        // Map CSV 'Pub' -> Schema 'publisher'
+        publisher: get('Pub'), 
         
-        // INVENTORY
-        locations: shelfCodes,
-        count: shelfCodes.length || 1,
-        callNumber: normalized.callNumber || "",
+        // Location Data
+        location: get('Shelf'),
+        callNumber: get('CallNo'),
         
-        // ENGINE METADATA (For debugging)
+        // Status & Meta
+        status: get('Status'),
+        description: get('Desc'), // Using physical description as placeholder
+        
+        // Technical
         meta: {
-            source: metaData.source || "Local",
-            originalId: normalized.originalId,
-            lastSeeded: new Date()
+            source: 'LocalLibrary',
+            originalId: get('BiblioID'),
+            barcode: get('Barcode')
         }
     };
 };
 
-module.exports = { mapToStandardBook };
+module.exports = { mapCsvToBook };

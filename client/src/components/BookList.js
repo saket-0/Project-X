@@ -6,19 +6,14 @@ const BookList = ({ books, onBookClick }) => {
   return (
     <div className="space-y-3">
       {books.map((book, index) => {
-        // FIXED: Use the parsed data from backend if available
-        let shelfDisplay = "Unknown Location";
-        
-        if (book.parsedLocation && book.parsedLocation.floor !== 'N/A') {
-            // Clean format: "IF - Rack 42"
-            shelfDisplay = `${book.parsedLocation.floor} - Rack ${book.parsedLocation.rack}`;
-        } else {
-            // Fallback to raw strings
-            shelfDisplay = book.location || book.shelf || book.callNumber || "Processing...";
-        }
+        // --- FIX: RAW FORMAT RESTORED ---
+        // We use the raw 'location' field directly (e.g. "IIF-R9-C10-D")
+        // The "Friendly" names (1st Floor) are now reserved ONLY for the Sidebar Filters.
+        const shelfDisplay = book.location || book.shelf || "Processing...";
 
         const isAvailable = book.status ? book.status.toLowerCase().includes('available') : false;
 
+        // Footer: Publisher • Tag1, Tag2
         const tags = book.tags || [];
         let footerText = book.publisher || '';
         if (tags.length > 0) {
