@@ -1,5 +1,5 @@
 import React from 'react';
-import { Filter, Check } from 'lucide-react';
+import { Filter, Check, MapPin } from 'lucide-react';
 
 const FilterGroup = ({ title, options, selected, onChange }) => {
   if (!options || options.length === 0) return null;
@@ -9,7 +9,6 @@ const FilterGroup = ({ title, options, selected, onChange }) => {
       <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
         {title}
       </h3>
-      {/* No internal max-height; allows parent container to handle scrolling */}
       <div className="space-y-2">
         {options.map((opt) => {
           const isSelected = selected.includes(opt);
@@ -64,7 +63,7 @@ const FilterSidebar = ({ facets, selectedFilters, onFilterChange }) => {
         </label>
       </div>
 
-      {/* Dynamic Filters */}
+      {/* Metadata Filters */}
       <FilterGroup 
         title="Authors" 
         options={facets.authors} 
@@ -79,12 +78,34 @@ const FilterSidebar = ({ facets, selectedFilters, onFilterChange }) => {
         onChange={(val) => onFilterChange('pubs', val)}
       />
 
-      <FilterGroup 
-        title="Locations" 
-        options={facets.shelves} 
-        selected={selectedFilters.shelves}
-        onChange={(val) => onFilterChange('shelves', val)}
-      />
+      {/* Location Section */}
+      <div className="mt-8 pt-6 border-t border-gray-100">
+        <div className="flex items-center gap-2 mb-4">
+          <MapPin className="w-4 h-4 text-blue-600" />
+          <h2 className="font-bold text-gray-800 text-sm">Location Details</h2>
+        </div>
+
+        <FilterGroup 
+          title="Floor" 
+          options={facets.floors} 
+          selected={selectedFilters.floors}
+          onChange={(val) => onFilterChange('floors', val)}
+        />
+
+        <FilterGroup 
+          title="Rack Number" 
+          options={facets.racks} 
+          selected={selectedFilters.racks}
+          onChange={(val) => onFilterChange('racks', val)}
+        />
+
+        <FilterGroup 
+          title="Column" 
+          options={facets.cols} 
+          selected={selectedFilters.cols}
+          onChange={(val) => onFilterChange('cols', val)}
+        />
+      </div>
     </div>
   );
 };

@@ -4,6 +4,7 @@ import { Search, BookOpen, ChevronLeft, ChevronRight, SlidersHorizontal } from '
 import BookList from './components/BookList';
 import BookDetail from './components/BookDetail';
 import FilterSidebar from './components/FilterSidebar';
+import { parseShelf } from './utils/shelfUtils'; // Import the helper
 
 // Debounce Hook
 const useDebounce = (value, delay) => {
@@ -25,11 +26,15 @@ function App() {
   
   // Filter State
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  
+  // UPDATED: split locations into specific pieces
   const [filters, setFilters] = useState({
     availableOnly: false,
     authors: [],
     pubs: [],
-    shelves: []
+    floors: [],
+    racks: [],
+    cols: []
   });
 
   // Selection State
@@ -40,7 +45,6 @@ function App() {
   const fetchBooks = useCallback(async (searchQuery, pageNum) => {
     setLoading(true);
     try {
-      // Increased limit to 50 to populate filters with more data
       const res = await axios.get(`http://localhost:5001/api/books`, {
         params: { search: searchQuery, page: pageNum, limit: 50 } 
       });
@@ -54,13 +58,11 @@ function App() {
     }
   }, []);
 
-  // Reset to page 1 on new search
   useEffect(() => {
     setPage(1);
     fetchBooks(debouncedSearch, 1);
   }, [debouncedSearch, fetchBooks]);
 
-  // Fetch on page change
   useEffect(() => {
     fetchBooks(debouncedSearch, page);
   }, [page, fetchBooks, debouncedSearch]);
@@ -71,18 +73,30 @@ function App() {
   const facets = useMemo(() => {
     const authors = new Set();
     const pubs = new Set();
-    const shelves = new Set();
+    const floors = new Set();
+    const racks = new Set();
+    const cols = new Set();
 
     books.forEach(b => {
       if(b.Author) authors.add(b.Author);
       if(b.Pub) pubs.add(b.Pub);
-      if(b.Shelf) shelves.add(b.Shelf);
+      
+      // Parse Shelf location
+      const loc = parseShelf(b.Shelf);
+      if (loc) {
+        floors.add(loc.floorLabel);
+        racks.add(loc.rack); // Add number directly
+        cols.add(loc.col);
+      }
     });
 
     return {
       authors: Array.from(authors).sort(),
       pubs: Array.from(pubs).sort(),
-      shelves: Array.from(shelves).sort()
+      floors: Array.from(floors).sort(),
+      // Sort numbers numerically, not alphabetically
+      racks: Array.from(racks).sort((a, b) => a - b),
+      cols: Array.from(cols).sort((a, b) => a - b)
     };
   }, [books]);
 
@@ -109,12 +123,23 @@ function App() {
         const isAvailable = book.Status && book.Status.toLowerCase().includes('available');
         if (!isAvailable) return false;
       }
-      // Authors
+      
+      // Standard Text Filters
       if (filters.authors.length > 0 && !filters.authors.includes(book.Author)) return false;
-      // Publications
       if (filters.pubs.length > 0 && !filters.pubs.includes(book.Pub)) return false;
-      // Shelves
-      if (filters.shelves.length > 0 && !filters.shelves.includes(book.Shelf)) return false;
+
+      // Location Parsed Filters
+      // If any location filter is active, we must parse the book's shelf
+      if (filters.floors.length > 0 || filters.racks.length > 0 || filters.cols.length > 0) {
+        const loc = parseShelf(book.Shelf);
+        
+        // If book has no valid location but we are filtering by location, exclude it
+        if (!loc) return false;
+
+        if (filters.floors.length > 0 && !filters.floors.includes(loc.floorLabel)) return false;
+        if (filters.racks.length > 0 && !filters.racks.includes(loc.rack)) return false;
+        if (filters.cols.length > 0 && !filters.cols.includes(loc.col)) return false;
+      }
 
       return true;
     });
@@ -122,8 +147,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-20">
-      
-      {/* Sticky Header */}
+      {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-20 border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -137,17 +161,15 @@ function App() {
               <h1 className="text-xl font-bold text-gray-900 tracking-tight">Project X Library</h1>
             </div>
             
-            {/* Only show search if not in detail view */}
             {!selectedBookGroup && (
               <div className="flex gap-3 w-full md:w-auto">
-                {/* Mobile Filter Toggle */}
                 <button 
                   className="md:hidden p-2.5 bg-gray-100 rounded-xl hover:bg-gray-200"
                   onClick={() => setShowMobileFilters(!showMobileFilters)}
                 >
                   <SlidersHorizontal className="w-5 h-5 text-gray-600" />
                 </button>
-
+                
                 <div className="relative w-full md:w-96">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input 
@@ -165,22 +187,15 @@ function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        
         {selectedBookGroup ? (
-          // --- Detail View ---
           <BookDetail 
             bookGroup={selectedBookGroup} 
             onBack={() => setSelectedBookGroup(null)} 
           />
         ) : (
-          // --- List View (With Sidebar) ---
           <div className="flex flex-col md:flex-row gap-8 items-start relative">
             
-            {/* --- LEFT SIDEBAR --- 
-                - sticky top-24: Sticks below the header
-                - h-[calc(100vh-8rem)]: Limits height to viewport so it doesn't overflow screen
-                - overflow-y-auto: Adds personal scrollbar for filter content
-            */}
+            {/* Sidebar */}
             <aside className={`
               w-full md:w-64 flex-shrink-0 
               sticky top-24 
@@ -196,7 +211,7 @@ function App() {
               />
             </aside>
 
-            {/* --- RIGHT CONTENT (The List) --- */}
+            {/* Main Content */}
             <div className="flex-1 w-full min-w-0">
               <div className="mb-6 flex justify-between items-end">
                  <div>
@@ -223,7 +238,6 @@ function App() {
                 />
               )}
 
-              {/* Pagination */}
               {!loading && books.length > 0 && (
                 <div className="mt-10 flex justify-center gap-3">
                   <button 
