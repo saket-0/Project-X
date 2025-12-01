@@ -1,49 +1,55 @@
 import React from 'react';
-import ResponsiveItem from './ResponsiveItem';
 import { useNavigate } from 'react-router-dom';
+import { MapPin, Layers, Monitor, Disc } from 'lucide-react';
+import ResponsiveItem from './ResponsiveItem'; 
 
 const BookList = ({ books, loading }) => {
   const navigate = useNavigate();
 
-  if (loading) {
-    return (
-      <div className="space-y-4 animate-pulse">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-24 bg-gray-100 rounded-xl w-full"></div>
-        ))}
-      </div>
-    );
-  }
-
-  if (!books || books.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-xl border border-dashed border-gray-300">
-        <div className="bg-gray-50 p-4 rounded-full mb-4">
-            <span className="text-4xl">🔍</span>
-        </div>
-        <h3 className="text-lg font-medium text-gray-900">No books found</h3>
-        <p className="text-gray-500 max-w-sm mt-2">
-          Try adjusting your search terms or clearing the filters to see more results.
-        </p>
-      </div>
-    );
-  }
+  if (loading) return <div className="p-10 text-center animate-pulse">Loading library data...</div>;
+  if (!books || books.length === 0) return <div className="p-10 text-center text-gray-500">No books found.</div>;
 
   return (
-    <div className="flex flex-col space-y-4 pb-20">
-      {books.map((book) => (
-        <ResponsiveItem 
-          key={book._id} 
-          data={book} 
-          // --- FIX IS HERE ---
-          // Use _id (MongoDB ID) because it is ALWAYS present.
-          // Your backend's "Strategy 2" knows how to handle this!
-          onClick={() => {
-            console.log("Navigating to book:", book._id); // Debug log for you
-            navigate(`/book/${book._id}`);
-          }} 
-        />
-      ))}
+    <div className="space-y-3 pb-20">
+      {books.map((book, index) => {
+        // Safe Accessor Logic
+        const accType = (book.accessionType || '').toUpperCase();
+        let LocationIcon = accType.includes('E-BOOK') ? Monitor : (accType.includes('CD') ? Disc : MapPin);
+        let shelfDisplay = book.location || book.shelf || "N/A";
+
+        // Determine the Best ID to use
+        // 1. _id (MongoDB ID) - Best
+        // 2. libraryId (Numeric) - Fallback
+        const validId = book._id || book.libraryId;
+
+        return (
+          <ResponsiveItem
+            key={validId || index}
+            onClick={() => {
+                if (validId) {
+                    navigate(`/book/${validId}`);
+                } else {
+                    console.error("Book has no ID:", book);
+                    alert("System Error: This book has no valid ID. Please report to admin.");
+                }
+            }}
+            
+            title={book.title || 'Untitled'}
+            subtitle={book.author || 'Unknown Author'}
+            tertiary={book.publisher}
+            tags={book.tags ? book.tags.slice(0, 3) : []}
+            
+            stats={[
+              { icon: Layers, value: `${book.totalCopies || 1} Copies`, subLabel: 'Available' },
+              { icon: LocationIcon, value: shelfDisplay, subLabel: 'Location' }
+            ]}
+            status={{
+              isPositive: (book.status || '').toLowerCase().includes('available'),
+              label: book.status || 'Unknown'
+            }}
+          />
+        );
+      })}
     </div>
   );
 };
