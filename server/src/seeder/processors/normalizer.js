@@ -31,6 +31,11 @@ const cleanPublisher = (rawPub) => {
 
     let pub = rawPub.toUpperCase().trim();
 
+    // --- FIX APPLIED HERE ---
+    // Remove "NONE" prefix which appears in bad entries (e.g., "None Pearson" -> "PEARSON")
+    // The regex matches "NONE" at the start, optionally followed by separators (space, hyphen, comma, colon)
+    pub = pub.replace(/^NONE\s*[-:,]?\s*/, '');
+
     // 1. Remove Years (e.g. "2010")
     pub = pub.replace(/\d{4}$/, '').trim();
     pub = pub.replace(/,\s*\d{4}/, '').trim();

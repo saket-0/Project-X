@@ -12,11 +12,8 @@ const BookList = ({ books, onBookClick }) => {
         const isAvailable = book.status ? book.status.toLowerCase().includes('available') : false;
 
         const tags = book.tags || [];
-        let footerText = book.publisher || '';
-        if (tags.length > 0) {
-            const tagStr = tags.slice(0, 3).join(', ');
-            footerText = footerText ? `${footerText} • ${tagStr}` : tagStr;
-        }
+        // FIX: Cleaned up footerText to only show Publisher. Tags are now separate.
+        const footerText = book.publisher || '';
 
         // Calculate dynamic copies text
         const copiesCount = book.totalCopies || 1;
@@ -29,10 +26,10 @@ const BookList = ({ books, onBookClick }) => {
             title={book.title || 'Untitled'}
             subtitle={book.author || 'Unknown Author'}
             tertiary={footerText}
+            tags={tags.slice(0, 3)} // Pass the first 3 tags to the item
             stats={[
               { 
                 icon: Layers, 
-                // --- FIX: Use the calculated copies text instead of hardcoded '1 Copy' ---
                 value: copiesText, 
                 subLabel: 'In Library' 
               },

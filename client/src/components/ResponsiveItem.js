@@ -5,6 +5,7 @@ const ResponsiveItem = ({
   title, 
   subtitle, 
   tertiary, 
+  tags, // NEW: Receive tags prop
   stats = [], 
   status,     
   onClick 
@@ -24,13 +25,26 @@ const ResponsiveItem = ({
         {tertiary && (
           <div className="text-xs text-gray-400 mt-0.5 font-mono hidden md:block">{tertiary}</div>
         )}
+
+        {/* NEW: Structured Tag Badges */}
+        {tags && tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {tags.map((tag, idx) => (
+              <span 
+                key={idx} 
+                className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100 uppercase tracking-wide"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 2. Responsive Stats Row (Smart Flex) */}
       <div className="flex items-center gap-2 md:gap-6 shrink-0 w-full md:w-auto mt-1 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-100">
         
         {stats.map((stat, idx) => {
-          // Identify if this is the last item (usually Location) which needs to flex
           const isLast = idx === stats.length - 1;
           
           return (
@@ -45,7 +59,7 @@ const ResponsiveItem = ({
                  rounded-md text-xs md:text-sm font-medium text-gray-600 
                  bg-gray-50 border border-gray-200 md:bg-transparent md:border-0 
                  w-full md:w-auto
-                 ${isLast ? 'justify-start' : 'justify-center'} /* Fix: Left align content in flex-1 box */
+                 ${isLast ? 'justify-start' : 'justify-center'}
                `}>
                   {stat.icon && <stat.icon className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
                   <span className="truncate">{stat.value}</span>
@@ -55,7 +69,6 @@ const ResponsiveItem = ({
           );
         })}
 
-        {/* Status Badge - Pushed to the end if needed, but gap handles it */}
         {status && (
           <div className={`shrink-0 md:w-28 flex items-center justify-end md:justify-center gap-1.5 text-xs md:text-sm font-semibold py-1 rounded-md ${status.isPositive ? 'text-green-600' : 'text-red-500'}`}>
              {status.isPositive ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
