@@ -6,16 +6,15 @@ const BookList = ({ books, onBookClick }) => {
   return (
     <div className="space-y-3">
       {books.map((book, index) => {
-        // --- FIX: Show "N/A" if location is missing ---
         const shelfDisplay = book.location || book.shelf || "N/A";
 
+        // Logic Check: 'Available' is the only positive state. 
+        // Everything else (Checked Out, Not for Loan, N/A) is negative/red.
         const isAvailable = book.status ? book.status.toLowerCase().includes('available') : false;
 
         const tags = book.tags || [];
-        // FIX: Cleaned up footerText to only show Publisher. Tags are now separate.
         const footerText = book.publisher || '';
 
-        // Calculate dynamic copies text
         const copiesCount = book.totalCopies || 1;
         const copiesText = copiesCount === 1 ? '1 Copy' : `${copiesCount} Copies`;
 
@@ -26,7 +25,7 @@ const BookList = ({ books, onBookClick }) => {
             title={book.title || 'Untitled'}
             subtitle={book.author || 'Unknown Author'}
             tertiary={footerText}
-            tags={tags.slice(0, 3)} // Pass the first 3 tags to the item
+            tags={tags.slice(0, 3)}
             stats={[
               { 
                 icon: Layers, 
@@ -41,7 +40,9 @@ const BookList = ({ books, onBookClick }) => {
             ]}
             status={{
               isPositive: isAvailable,
-              label: isAvailable ? 'Available' : 'Out'
+              // FIX: Use the actual status text from the backend ('Not for Loan', 'N/A', etc.)
+              // instead of hardcoding 'Available' / 'Out'.
+              label: book.status || 'Unknown' 
             }}
           />
         );
