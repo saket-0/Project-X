@@ -5,7 +5,8 @@ const ResponsiveItem = ({
   title, 
   subtitle, 
   tertiary, 
-  tags, // NEW: Receive tags prop
+  tags, 
+  format, // "E-Book", "CD", etc.
   stats = [], 
   status,     
   onClick 
@@ -17,16 +18,35 @@ const ResponsiveItem = ({
     >
       {/* 1. Main Content Section */}
       <div className="flex-1 min-w-0 pr-6 md:pr-0"> 
+        {/* Title */}
         <h3 className="text-base md:text-lg font-bold text-gray-900 leading-snug mb-0.5" title={title}>
           {title || "Untitled"}
         </h3>
+        
+        {/* Author */}
         <p className="text-gray-500 text-sm truncate">{subtitle || "Unknown"}</p>
         
-        {tertiary && (
-          <div className="text-xs text-gray-400 mt-0.5 font-mono hidden md:block">{tertiary}</div>
-        )}
+        {/* Metadata Row (Badge + Publisher) */}
+        <div className="flex items-center gap-2 mt-1.5 min-h-[20px]">
+            {/* Format Badge (Only renders if format exists) */}
+            {format && (
+                <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider shadow-sm">
+                    {format}
+                </span>
+            )}
 
-        {/* NEW: Structured Tag Badges */}
+            {/* Publisher Text 
+                FIX: We use a Template Literal to conditionally add the border classes.
+                The border-l (pipe) is ONLY added if 'format' exists. 
+            */}
+            {tertiary && (
+              <span className={`text-xs text-gray-400 font-mono hidden md:block truncate ${format ? 'border-l border-gray-300 pl-2 ml-0.5' : ''}`}>
+                {tertiary}
+              </span>
+            )}
+        </div>
+        
+        {/* Structured Tag Badges */}
         {tags && tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2">
             {tags.map((tag, idx) => (
@@ -41,7 +61,7 @@ const ResponsiveItem = ({
         )}
       </div>
 
-      {/* 2. Responsive Stats Row (Smart Flex) */}
+      {/* 2. Responsive Stats Row */}
       <div className="flex items-center gap-2 md:gap-6 shrink-0 w-full md:w-auto mt-1 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-100">
         
         {stats.map((stat, idx) => {
@@ -78,7 +98,6 @@ const ResponsiveItem = ({
         )}
       </div>
 
-      {/* Chevron */}
       <div className="absolute top-4 right-4 md:static md:pl-2 text-gray-300 group-hover:text-blue-500 transition-colors">
         <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
       </div>

@@ -1,20 +1,38 @@
 import React from 'react';
-import { MapPin, Layers } from 'lucide-react';
+// Added 'Monitor' and 'Disc' icons for digital items
+import { MapPin, Layers, Monitor, Disc } from 'lucide-react';
 import ResponsiveItem from './ResponsiveItem'; 
 
 const BookList = ({ books, onBookClick }) => {
   return (
     <div className="space-y-3">
       {books.map((book, index) => {
-        const shelfDisplay = book.location || book.shelf || "N/A";
+        
+        // --- LOGIC: Detect Digital Formats ---
+        const accType = (book.accessionType || '').toUpperCase();
+        const isEbook = accType.includes('E-BOOK');
+        const isCD = accType.includes('CD') || accType.includes('DIGITAL');
 
-        // Logic Check: 'Available' is the only positive state. 
-        // Everything else (Checked Out, Not for Loan, N/A) is negative/red.
+        // 1. Determine Location Text & Icon
+        let shelfDisplay = book.location || book.shelf || "N/A";
+        let LocationIcon = MapPin;
+
+        if (isEbook) {
+            shelfDisplay = "Digital Access";
+            LocationIcon = Monitor;
+        } else if (isCD) {
+            shelfDisplay = "Digital Media";
+            LocationIcon = Disc;
+        }
+
+        // 2. Determine Format Label (The Indicator)
+        let formatLabel = null;
+        if (isEbook) formatLabel = "E-Book";
+        else if (isCD) formatLabel = "CD / Digital";
+
         const isAvailable = book.status ? book.status.toLowerCase().includes('available') : false;
-
         const tags = book.tags || [];
         const footerText = book.publisher || '';
-
         const copiesCount = book.totalCopies || 1;
         const copiesText = copiesCount === 1 ? '1 Copy' : `${copiesCount} Copies`;
 
@@ -26,6 +44,10 @@ const BookList = ({ books, onBookClick }) => {
             subtitle={book.author || 'Unknown Author'}
             tertiary={footerText}
             tags={tags.slice(0, 3)}
+            
+            // Pass the new format label to the item
+            format={formatLabel} 
+
             stats={[
               { 
                 icon: Layers, 
@@ -33,16 +55,14 @@ const BookList = ({ books, onBookClick }) => {
                 subLabel: 'In Library' 
               },
               { 
-                icon: MapPin, 
-                value: shelfDisplay, 
+                icon: LocationIcon, // Dynamic Icon
+                value: shelfDisplay, // Dynamic Text
                 subLabel: 'Location' 
               }
             ]}
             status={{
               isPositive: isAvailable,
-              // FIX: Use the actual status text from the backend ('Not for Loan', 'N/A', etc.)
-              // instead of hardcoding 'Available' / 'Out'.
-              label: book.status || 'Unknown' 
+              label: book.status || 'Unknown'
             }}
           />
         );
