@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'; // Added useRef
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { Search, BookOpen, SlidersHorizontal, ServerCrash, X, Settings2, RotateCcw } from 'lucide-react'; 
+// Added 'Highlighter' icon
+import { Search, BookOpen, SlidersHorizontal, ServerCrash, X, Settings2, RotateCcw, Highlighter } from 'lucide-react'; 
 import BookList from './components/BookList';
 import BookDetail from './components/BookDetail';
 import FilterSidebar from './components/FilterSidebar';
@@ -37,13 +38,12 @@ function App() {
         publisher: false,
         tags: false
     },
-    exact: false
+    exact: false,
+    highlight: true // <--- NEW: Default enabled
   });
   const [showSearchOpts, setShowSearchOpts] = useState(false);
   
-  // --- NEW: Ref for Click Outside Detection ---
   const searchContainerRef = useRef(null);
-
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [selectedBook, setSelectedBook] = useState(null);
   
@@ -59,19 +59,14 @@ function App() {
 
   const debouncedSearch = useDebounce(searchTerm, 500);
 
-  // --- NEW: Effect to handle clicking outside ---
   useEffect(() => {
     const handleClickOutside = (event) => {
-      // If the menu is open AND the click is NOT inside the container, close it
       if (showSearchOpts && searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
         setShowSearchOpts(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showSearchOpts]);
 
   const fetchBooks = useCallback(async () => {
@@ -120,11 +115,11 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, page, filters, limit, searchOptions]);
+  }, [debouncedSearch, page, filters, limit, searchOptions]); // Included searchOptions
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, filters, limit, searchOptions]);
+  }, [debouncedSearch, filters, limit, searchOptions.fields, searchOptions.exact]); // Don't reset page on highlight toggle
 
   useEffect(() => {
     fetchBooks();
@@ -156,17 +151,15 @@ function App() {
   const toggleField = (field) => {
       setSearchOptions(prev => ({
           ...prev,
-          fields: {
-              ...prev.fields,
-              [field]: !prev.fields[field]
-          }
+          fields: { ...prev.fields, [field]: !prev.fields[field] }
       }));
   };
 
   const resetSearchOptions = () => {
       setSearchOptions({
         fields: { title: true, author: true, publisher: false, tags: false },
-        exact: false
+        exact: false,
+        highlight: true
       });
   };
 
@@ -186,7 +179,6 @@ function App() {
             </div>
             
             {!selectedBook && (
-              // ATTACHED REF HERE
               <div 
                 ref={searchContainerRef}
                 className="relative flex flex-col w-full md:w-auto"
@@ -256,6 +248,20 @@ function App() {
                                 <span className="text-gray-700">Exact Match</span>
                             </label>
 
+                            {/* --- NEW: Highlighter Toggle --- */}
+                            <button
+                                onClick={() => setSearchOptions(prev => ({ ...prev, highlight: !prev.highlight }))}
+                                className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border transition-all ${
+                                    searchOptions.highlight
+                                      ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                                      : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                                }`}
+                                title="Toggle Text Highlighting"
+                            >
+                                <Highlighter className="w-3.5 h-3.5" />
+                                Highlight
+                            </button>
+
                             <button 
                                 onClick={resetSearchOptions}
                                 className="flex items-center gap-1 text-gray-400 hover:text-red-500 text-xs font-medium ml-auto md:ml-0"
@@ -322,7 +328,13 @@ function App() {
                 </div>
               ) : (
                 <>
-                  <BookList books={books} onBookClick={setSelectedBook} />
+                  <BookList 
+                    books={books} 
+                    onBookClick={setSelectedBook} 
+                    // --- NEW: Pass Highlight Props ---
+                    highlightTerm={debouncedSearch}
+                    highlightEnabled={searchOptions.highlight}
+                  />
                   {books.length > 0 && (
                     <Pagination currentPage={page} totalPages={totalPages} onPageChange={(p) => setPage(p)} />
                   )}
