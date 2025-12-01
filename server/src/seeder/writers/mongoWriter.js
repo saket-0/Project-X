@@ -1,42 +1,51 @@
-/**
- * server/src/seeder/writers/mongoWriter.js
- */
 const Book = require('../../models/Book');
 
 const writeBatch = async (processedBooks) => {
-    const ops = processedBooks.map(b => {
-        
-        // Logic to determine the best location string
-        // If 'shelf' exists (e.g., "IIF-R3-C4-D"), use it. Otherwise fallback.
-        const finalLocation = b.shelf || b.location || 'N/A';
+    if (processedBooks.length === 0) return;
 
-        return {
-            updateOne: {
-                // Filter by Title and Author to avoid duplicates
-                filter: { title: b.title, author: b.author },
-                update: {
-                    $set: {
-                        title: b.title,
-                        author: b.author, // This matches the Schema and Mapper now
-                        publisher: b.publisher,
-                        accessionType: b.accessionType,
-                        callNumber: b.callNumber,
-                        status: b.status,
-                        tags: b.tags || [],
-                        coverImage: '', // CSV usually doesn't have images
-                        description: b.description,
-                        location: finalLocation, // Save the rack/shelf location
-                        isbn: b.isbn
-                    },
-                    // If using 'count' logic (optional):
-                    // $inc: { count: 1 } 
-                },
-                upsert: true
-            }
-        };
-    });
+    const ops = processedBooks.map(b => ({
+        updateOne: {
+            filter: { libraryId: b.id }, // Use Library ID as unique key
+            update: {
+                $set: {
+                    libraryId: b.id,
+                    title: b.title,
+                    author: b.author,
+                    publisher: b.publisher,
+                    
+                    // Location
+                    floor: b.floor,
+                    row: b.row,
+                    rack: b.rack,
+                    shelfCode: b.shelfCode,
+                    
+                    // Classification
+                    callNumber: b.callNumber,
+                    isbn: b.isbn,
+                    category: b.category,
+                    
+                    // Status
+                    status: b.status,
+                    derivedStatus: b.derivedStatus,
+                    statusColor: b.statusColor,
+                    
+                    // Meta
+                    tags: b.tags,
+                    year: b.year,
+                    pages: b.pages,
+                    vendor: b.vendor,
+                    scrapedAt: b.meta?.scrapedAt
+                }
+            },
+            upsert: true
+        }
+    }));
 
-    if (ops.length > 0) await Book.bulkWrite(ops);
+    try {
+        await Book.bulkWrite(ops);
+    } catch (error) {
+        console.error("❌ Bulk Write Error:", error.message);
+    }
 };
 
 module.exports = { writeBatch };

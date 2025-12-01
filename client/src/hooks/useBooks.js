@@ -1,58 +1,67 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
-// Refactored: No more hardcoded localhost
-const API_URL = `${process.env.REACT_APP_API_URL}/api/books`; 
+// Simple debounce helper
+const useDebounce = (value, delay) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+};
 
-export const useBooks = (searchTerm, filters) => {
-   // ... (rest of the code remains the same)
+export const useBooks = (initialFilters = {}) => {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    totalPages: 0,
-    totalResults: 0
-  });
+  
+  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState(initialFilters); // { floor: 'III', category: '...' }
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState({});
 
-  const fetchBooks = useCallback(async (pageNum = 1) => {
+  const debouncedSearch = useDebounce(search, 400);
+
+  const fetchBooks = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      // Convert filters object into query params
       const params = {
-        page: pageNum,
-        search: searchTerm,
+        search: debouncedSearch,
+        page,
         limit: 50,
-        ...filters // Spread filters (availableOnly, authors, etc) directly
+        ...filters
       };
-
-      const res = await axios.get(API_URL, { params });
       
-      setBooks(res.data.data || []);
-      setPagination({
-        page: res.data.meta.currentPage,
-        totalPages: res.data.meta.totalPages,
-        totalResults: res.data.meta.totalResults
-      });
+      const response = await axios.get('http://localhost:5001/api/books', { params });
+      
+      setBooks(response.data.data);
+      setMeta(response.data.meta);
     } catch (err) {
       console.error("Fetch error:", err);
-      setError("Could not connect to the Library Database.");
+      setError("Failed to load books. Please check backend.");
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, filters]); // Re-create fetcher when search or filters change
+  }, [debouncedSearch, page, filters]);
 
-  // Initial Fetch & Reset on Search/Filter Change
+  // Refetch when these change
   useEffect(() => {
-    fetchBooks(1);
+    fetchBooks();
   }, [fetchBooks]);
 
-  const goToPage = (newPage) => {
-    if (newPage >= 1 && newPage <= pagination.totalPages) {
-      fetchBooks(newPage);
-    }
+  return {
+    books,
+    loading,
+    error,
+    search,
+    setSearch,
+    filters,
+    setFilters,
+    page,
+    setPage,
+    meta,
+    refresh: fetchBooks
   };
-
-  return { books, loading, error, pagination, goToPage, refresh: () => fetchBooks(pagination.page) };
 };

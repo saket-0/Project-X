@@ -1,53 +1,62 @@
-const axios = require('axios');
-const config = require('../config');
+/**
+ * enricher.js
+ * Enhances the normalized book data with derived intelligence.
+ * Calculates 'Real-time Status', 'Vendor' details, and 'Smart Tags'.
+ */
 
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-let googleQuotaExhausted = !config.googleApiKey;
+const enrichBook = (book) => {
+    const enriched = { ...book };
+    const now = new Date();
 
-const fetchGoogle = async (title, author, retries = 1) => {
-    if (googleQuotaExhausted) return null;
-    const q = `intitle:${encodeURIComponent(title)}+inauthor:${encodeURIComponent(author)}`;
-    const url = `https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&key=${config.googleApiKey}`;
+    // --- 1. Deep Status Logic ---
+    // The 952 field often contains a due date like "2025-06-13" if checked out.
+    // We look for a date in the future within the raw 952 string.
+    const datePattern = /(\d{4}-\d{2}-\d{2})/;
+    const datesFound = book.shelfCode.match(new RegExp(datePattern, 'g')) || [];
+    
+    let isCheckedOut = false;
+    let dueDate = null;
 
-    try {
-        const res = await axios.get(url);
-        if (res.data.items?.[0]) return { ...res.data.items[0].volumeInfo, source: 'Google' };
-    } catch (e) {
-        if (e.response?.status === 403) googleQuotaExhausted = true;
-        if (e.response?.status === 429 && retries > 0) {
-            await sleep(2000);
-            return fetchGoogle(title, author, retries - 1);
+    datesFound.forEach(dateStr => {
+        const dateObj = new Date(dateStr);
+        if (dateObj > now) {
+            isCheckedOut = true;
+            dueDate = dateStr;
         }
+    });
+
+    if (enriched.status === 'Reference') {
+        enriched.derivedStatus = 'Reference';
+        enriched.statusColor = 'red';
+    } else if (isCheckedOut) {
+        enriched.derivedStatus = `Due: ${dueDate}`;
+        enriched.statusColor = 'orange';
+    } else {
+        enriched.derivedStatus = 'Available';
+        enriched.statusColor = 'green';
     }
-    return null;
-};
 
-const fetchOpenLib = async (title, author) => {
-    try {
-        const q = `title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}`;
-        const res = await axios.get(`https://openlibrary.org/search.json?${q}&limit=1`, { timeout: 5000 });
-        const doc = res.data.docs?.[0];
-        if (doc) return {
-            title: doc.title,
-            authors: doc.author_name,
-            publisher: doc.publisher?.[0],
-            description: "", // OL usually lacks descriptions
-            subjects: doc.subject,
-            source: 'OpenLib'
-        };
-    } catch (e) { /* ignore */ }
-    return null;
-};
+    // --- 2. Smart Tagging ---
+    enriched.tags = [];
+    
+    // Tag: New Arrival (if acquired in last 2 years - analyzing accession date if avail)
+    // For now, we use the scraped_at or publication year as proxy for "Freshness"
+    const pubYear = parseInt(book.year);
+    if (pubYear && pubYear >= 2024) {
+        enriched.tags.push('New Arrival');
+    }
 
-const enrichBook = async (book) => {
-    let meta = await fetchGoogle(book.rawTitle, book.rawAuthor);
-    if (!meta) meta = await fetchOpenLib(book.rawTitle, book.rawAuthor);
+    // Tag: Classic / Vintage
+    if (pubYear && pubYear < 1980) {
+        enriched.tags.push('Vintage');
+    }
 
-    return {
-        ...book,
-        metaData: meta || {},
-        source: meta?.source || 'Local'
-    };
+    // Tag: Textbook (based on Call Number 600-699 for Engineering/Tech)
+    if (book.callNumber.startsWith('6')) {
+        enriched.tags.push('Engineering');
+    }
+
+    return enriched;
 };
 
 module.exports = { enrichBook };

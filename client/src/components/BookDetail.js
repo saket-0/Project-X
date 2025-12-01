@@ -1,142 +1,128 @@
-import React from 'react';
-// Added 'Tag' to the imports for the icon
-import { ArrowLeft, MapPin, CheckCircle, XCircle, BookOpen, Tag } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { ArrowLeft, Map, Tag } from 'lucide-react';
 
-const BookDetail = ({ book, onBack }) => {
-  if (!book) return null;
+const BookDetail = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [book, setBook] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDetail = async () => {
+      try {
+        console.log("Fetching detail for ID:", id); // Debug Log
+        const res = await axios.get(`http://localhost:5001/api/books/${id}`);
+        if(res.data.success) setBook(res.data.data);
+      } catch (err) {
+        console.error("Detail Error", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDetail();
+  }, [id]);
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Loading details...</div>;
+  if (!book) return <div className="p-8 text-center text-red-500">Book not found.</div>;
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-      {/* Navigation Header */}
+    <div className="max-w-5xl mx-auto px-4 py-8">
       <button 
-        onClick={onBack}
-        className="mb-4 flex items-center gap-2 text-gray-500 hover:text-blue-600 transition-colors font-medium p-2 -ml-2 rounded-lg active:bg-gray-100 text-sm md:text-base"
+        onClick={() => navigate(-1)}
+        className="flex items-center text-gray-600 hover:text-indigo-600 mb-6 font-medium transition-colors"
       >
-        <ArrowLeft className="w-4 h-4" /> Back to Search
+        <ArrowLeft className="w-5 h-5 mr-2" /> Back to Library
       </button>
 
-      {/* Main Title Section - Compact Mobile Sizing */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 md:p-8 mb-6 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-start gap-3 md:gap-6">
-          <div className="p-2.5 md:p-4 bg-blue-100 rounded-lg text-blue-600 w-fit">
-            <BookOpen className="w-6 h-6 md:w-10 md:h-10" />
-          </div>
-          <div className="flex-1">
-            <h1 className="text-xl md:text-3xl font-bold text-gray-900 mb-1 leading-snug">{book.title}</h1>
-            <p className="text-base md:text-xl text-gray-600 mb-3">{book.author}</p>
-            
-            {/* Metadata Row */}
-            <div className="flex flex-wrap gap-2 text-xs md:text-sm text-gray-500 mb-4">
-               <span className="bg-gray-50 px-2.5 py-1 rounded-full border border-gray-100">
-                 Publisher: {book.publisher || 'N/A'}
-               </span>
-               <span className="bg-gray-50 px-2.5 py-1 rounded-full border border-gray-100">
-                 Total Copies: {book.totalCopies}
-               </span>
+      <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200 flex flex-col md:flex-row">
+        
+        {/* Left: Key Info */}
+        <div className="w-full md:w-2/3 p-8 border-b md:border-b-0 md:border-r border-gray-100">
+            <div className="flex items-start justify-between">
+                <div>
+                    <h1 className="text-3xl font-extrabold text-gray-900 mb-2">{book.title}</h1>
+                    <p className="text-xl text-indigo-600 font-medium mb-6">{book.author}</p>
+                </div>
+                <div className="text-right">
+                    <span className="block text-4xl font-black text-gray-100">{book.floor || "N/A"}</span>
+                    <span className="text-xs text-gray-400 uppercase tracking-widest">Floor</span>
+                </div>
             </div>
 
-            {/* --- NEW: Tags Section --- */}
-            {book.tags && book.tags.length > 0 && (
-              <div className="pt-4 border-t border-gray-100 flex items-start gap-3">
-                <div className="mt-1">
-                  <Tag className="w-4 h-4 text-gray-400" />
+            <div className="grid grid-cols-2 gap-y-6 gap-x-8 mt-6">
+                <div>
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Publisher</span>
+                    <p className="font-medium text-gray-800">{book.publisher}</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {book.tags.map((tag, idx) => (
-                    <span 
-                      key={idx} 
-                      className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100"
-                    >
-                      {tag}
-                    </span>
-                  ))}
+                <div>
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Year</span>
+                    <p className="font-medium text-gray-800">{book.year || 'N/A'}</p>
                 </div>
-              </div>
-            )}
-            {/* ------------------------- */}
-
-          </div>
-        </div>
-      </div>
-
-      <h3 className="text-base md:text-lg font-bold text-gray-900 mb-3 px-1">Available Versions & Copies</h3>
-
-      {/* --- DESKTOP VIEW: Table (Hidden on Mobile) --- */}
-      <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-4 font-medium text-gray-900">Call No</th>
-                <th className="px-6 py-4 font-medium text-gray-900">Location / Shelf</th>
-                <th className="px-6 py-4 font-medium text-gray-900">Accession Type</th>
-                <th className="px-6 py-4 font-medium text-gray-900">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {book.variants && book.variants.map((variant, idx) => (
-                <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 font-mono text-blue-600">{variant.callNumber || 'N/A'}</td>
-                  <td className="px-6 py-4 text-gray-600 flex items-center gap-2">
-                    <MapPin className="w-3 h-3 text-gray-400" />
-                    {variant.shelf || variant.location || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 text-gray-600">{variant.accessionType || 'Standard'}</td>
-                  <td className="px-6 py-4">
-                     <StatusBadge status={variant.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* --- MOBILE VIEW: Cards (Visible only on Mobile) --- */}
-      <div className="md:hidden space-y-3">
-        {book.variants && book.variants.map((variant, idx) => (
-          <div key={idx} className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-3">
-            <div className="flex justify-between items-start">
-               <div>
-                  <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Call Number</div>
-                  <div className="font-mono text-blue-600 font-medium text-base">{variant.callNumber || 'N/A'}</div>
-               </div>
-               <StatusBadge status={variant.status} />
+                <div>
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Category</span>
+                    <p className="font-medium text-gray-800">{book.category}</p>
+                </div>
+                <div>
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Pages</span>
+                    <p className="font-medium text-gray-800">{book.pages || 'N/A'}</p>
+                </div>
             </div>
-            
-            <div className="flex gap-4 pt-2 border-t border-gray-100">
-               <div className="flex-1 min-w-0">
-                 <div className="text-[10px] text-gray-400 mb-0.5">Shelf Location</div>
-                 <div className="text-sm text-gray-700 flex items-center gap-1">
-                   <MapPin className="w-3 h-3 text-gray-400 shrink-0" /> 
-                   <span className="truncate">{variant.shelf || variant.location || 'N/A'}</span>
+
+            <div className="mt-10 pt-6 border-t border-gray-100">
+                 <h3 className="text-sm font-bold text-gray-900 mb-2 flex items-center">
+                    <Tag className="w-4 h-4 mr-2 text-indigo-500"/>
+                    System Metadata
+                 </h3>
+                 <div className="flex flex-wrap gap-2 text-xs text-gray-500 font-mono">
+                    {/* Display Library ID if available, otherwise just use the DB ID */}
+                    <span className="bg-gray-100 px-2 py-1 rounded">ID: {book.libraryId || book._id}</span>
+                    <span className="bg-gray-100 px-2 py-1 rounded">ISBN: {book.isbn || 'N/A'}</span>
+                    <span className="bg-gray-100 px-2 py-1 rounded">Vendor: {book.vendor || 'N/A'}</span>
                  </div>
-               </div>
-               <div className="shrink-0">
-                 <div className="text-[10px] text-gray-400 mb-0.5 text-right">Type</div>
-                 <div className="text-sm text-gray-700">{variant.accessionType || 'Standard'}</div>
-               </div>
             </div>
-          </div>
-        ))}
+        </div>
+
+        {/* Right: Action & Status */}
+        <div className="w-full md:w-1/3 bg-gray-50 p-8 flex flex-col justify-between">
+            <div>
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Availability Status</h3>
+                
+                <div className={`p-4 rounded-xl border ${
+                    book.statusColor === 'green' ? 'bg-green-100 border-green-200 text-green-800' :
+                    book.statusColor === 'orange' ? 'bg-orange-100 border-orange-200 text-orange-800' : 
+                    'bg-red-100 border-red-200 text-red-800'
+                }`}>
+                    <div className="flex items-center font-bold text-lg mb-1">
+                        {book.statusColor === 'green' ? '● Available' : '● Checked Out'}
+                    </div>
+                    <p className="text-sm opacity-90">{book.derivedStatus}</p>
+                </div>
+
+                <div className="mt-8 space-y-4">
+                    <div className="flex items-center justify-between text-sm text-gray-600 border-b border-gray-200 pb-2">
+                        <span>Shelf Location</span>
+                        <span className="font-mono font-bold text-gray-900">{book.shelfCode || "Unknown"}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm text-gray-600 border-b border-gray-200 pb-2">
+                        <span>Row</span>
+                        <span className="font-bold text-gray-900">{book.row || "-"}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm text-gray-600">
+                        <span>Rack / Shelf</span>
+                        <span className="font-bold text-gray-900">{book.rack || "-"}</span>
+                    </div>
+                </div>
+            </div>
+
+            <button className="w-full mt-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center">
+                <Map className="w-5 h-5 mr-2" />
+                Locate on Map
+            </button>
+        </div>
       </div>
-
     </div>
-  );
-};
-
-// Helper Component for Status Badge
-const StatusBadge = ({ status }) => {
-  const isAvailable = status && status.toLowerCase().includes('available');
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border ${
-      isAvailable 
-        ? 'bg-green-50 text-green-700 border-green-200' 
-        : 'bg-red-50 text-red-700 border-red-200'
-    }`}>
-      {isAvailable ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-      {status || 'Unknown'}
-    </span>
   );
 };
 

@@ -1,26 +1,35 @@
-require('dotenv').config(); // This MUST be the first line
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const { searchBooks } = require('./src/controllers/bookController');
+const { getBooks, getBookById } = require('./src/controllers/bookController');
 
 const app = express();
+const PORT = process.env.PORT || 5001;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/library_db';
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-// DATABASE CONNECTION (Refactored)
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/library_db';
+// Routes
+app.get('/api/books', getBooks);
+app.get('/api/books/:id', getBookById);
 
-mongoose.connect(MONGO_URI)
-    .then(() => console.log('✅ Connected to MongoDB'))
-    .catch(err => console.error('❌ DB Connection Error:', err));
+// Start Server
+const startServer = async () => {
+    try {
+        // Connect to Mongo
+        await mongoose.connect(MONGO_URI);
+        console.log('✅ MongoDB Connected');
 
-app.get('/api/books', searchBooks);
+        app.listen(PORT, () => {
+            console.log(`🚀 Server running on http://localhost:${PORT}`);
+        });
 
-// PORT (Refactored)
-const PORT = process.env.PORT || 5001;
+    } catch (err) {
+        console.error('❌ Failed to connect to MongoDB:', err);
+    }
+};
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+startServer();

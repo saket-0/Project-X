@@ -1,88 +1,35 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 const Pagination = ({ currentPage, totalPages, onPageChange }) => {
   if (totalPages <= 1) return null;
 
-  // Helper to generate page numbers with "..." gaps
-  const getPageNumbers = () => {
-    const delta = 2; // How many pages to show around current page
-    const range = [];
-    const rangeWithDots = [];
-    let l;
-
-    range.push(1); // Always show first page
-
-    for (let i = currentPage - delta; i <= currentPage + delta; i++) {
-      if (i < totalPages && i > 1) {
-        range.push(i);
-      }
-    }
-    
-    range.push(totalPages); // Always show last page
-
-    // Add dots
-    for (let i of range) {
-      if (l) {
-        if (i - l === 2) {
-          rangeWithDots.push(l + 1);
-        } else if (i - l !== 1) {
-          rangeWithDots.push('...');
-        }
-      }
-      rangeWithDots.push(i);
-      l = i;
-    }
-
-    return rangeWithDots;
-  };
-
   return (
-    <div className="flex items-center justify-center gap-2 mt-10 select-none">
-      {/* PREV BUTTON */}
+    <div className="flex items-center justify-center space-x-4 py-8 mt-4 border-t border-gray-100">
       <button
-        disabled={currentPage === 1}
         onClick={() => onPageChange(currentPage - 1)}
-        className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-gray-600"
+        disabled={currentPage === 1}
+        className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
       >
-        <ChevronLeft className="w-5 h-5" />
+        <ChevronLeft className="w-4 h-4 mr-2" />
+        Previous
       </button>
 
-      {/* PAGE NUMBERS */}
-      <div className="flex items-center gap-1">
-        {getPageNumbers().map((page, idx) => {
-          if (page === '...') {
-            return (
-              <span key={idx} className="px-2 text-gray-400">
-                <MoreHorizontal className="w-4 h-4" />
-              </span>
-            );
-          }
-
-          return (
-            <button
-              key={idx}
-              onClick={() => onPageChange(page)}
-              className={`
-                w-9 h-9 flex items-center justify-center rounded-lg text-sm font-medium transition-all
-                ${currentPage === page 
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-200' 
-                  : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200 hover:border-gray-300'}
-              `}
-            >
-              {page}
-            </button>
-          );
-        })}
+      <div className="hidden md:flex items-center space-x-2">
+        <span className="px-3 py-1 text-sm font-semibold text-indigo-600 bg-indigo-50 rounded-md">
+          Page {currentPage}
+        </span>
+        <span className="text-gray-400">of</span>
+        <span className="text-sm text-gray-600">{totalPages}</span>
       </div>
 
-      {/* NEXT BUTTON */}
       <button
-        disabled={currentPage === totalPages}
         onClick={() => onPageChange(currentPage + 1)}
-        className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-gray-600"
+        disabled={currentPage >= totalPages}
+        className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
       >
-        <ChevronRight className="w-5 h-5" />
+        Next
+        <ChevronRight className="w-4 h-4 ml-2" />
       </button>
     </div>
   );

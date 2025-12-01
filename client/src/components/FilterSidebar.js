@@ -1,115 +1,95 @@
 import React from 'react';
-import { Filter, Check, MapPin, User, Book, Layers, Grid3X3, X, Archive } from 'lucide-react';
+import { Filter, X } from 'lucide-react';
 
-const FilterGroup = ({ title, options, selected, onChange, icon: Icon, variant = 'list' }) => {
-  if (!options || options.length === 0) return null;
-  const isGrid = variant === 'grid';
-  // ... (Same rendering logic) ...
+const FilterSidebar = ({ facets = {}, selectedFilters, onFilterChange, isOpen, onClose }) => {
+  // Safe defaults if facets are still loading
+  const floors = facets.floors || [];
+  const categories = facets.categories || [];
+
   return (
-    <div className="mb-5">
-      <div className="flex items-center gap-2 mb-2">
-        {Icon && <Icon className="w-3.5 h-3.5 text-blue-600" />}
-        <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">{title}</h3>
-      </div>
-      {isGrid ? (
-        <div className="flex flex-wrap gap-2">
-          {options.map((opt) => {
-            const isSelected = selected.includes(opt);
-            return (
-              <button
-                key={opt}
-                onClick={() => onChange(opt)}
-                className={`w-11 h-9 text-xs font-medium rounded border transition-all flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-white border-gray-200 text-gray-600 hover:border-blue-400 hover:text-blue-600'}`}
-                title={`Rack ${opt}`}
-              >
-                {opt}
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 pr-1">
-          {options.map((opt) => {
-            const isSelected = selected.includes(opt);
-            return (
-              <label key={opt} className={`flex items-center gap-3 cursor-pointer group text-sm transition-all ${isSelected ? 'text-blue-700 font-medium' : 'text-gray-600'}`}>
-                <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all flex-shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600 scale-110' : 'bg-white border-gray-300 group-hover:border-blue-400'}`}>
-                  {isSelected && <Check className="w-3 h-3 text-white" />}
-                </div>
-                <input type="checkbox" className="hidden" checked={isSelected} onChange={() => onChange(opt)} />
-                <span className="truncate leading-snug">{opt}</span>
-              </label>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const FilterSidebar = ({ facets, selectedFilters, onFilterChange, onClearFilters }) => {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 min-h-full">
-      
-      {/* HEADER: Clear Button is here (Top) */}
-      <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-blue-600" />
-          <h2 className="font-bold text-gray-900">Filters</h2>
-        </div>
-        
-        <button 
-          onClick={onClearFilters}
-          className="group flex items-center gap-1 px-2 py-1 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-600 transition-all text-xs font-medium"
-          title="Reset all filters"
-        >
-          <X className="w-3 h-3 group-hover:rotate-90 transition-transform" />
-          <span>Clear</span>
-        </button>
-      </div>
-
-      <div className="mb-6">
-        <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2">Status</h3>
-        <label className="flex items-center gap-3 cursor-pointer text-sm text-gray-700 group">
-          <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all flex-shrink-0 ${selectedFilters.availableOnly ? 'bg-green-600 border-green-600' : 'bg-white border-gray-300 group-hover:border-green-500'}`}>
-            {selectedFilters.availableOnly && <Check className="w-3 h-3 text-white" />}
-          </div>
-          <input type="checkbox" className="hidden" checked={selectedFilters.availableOnly} onChange={() => onFilterChange('availableOnly', !selectedFilters.availableOnly)} />
-          <span className={selectedFilters.availableOnly ? "text-green-700 font-medium" : ""}>Available Books Only</span>
-        </label>
-      </div>
-
-      {/* Location Section */}
-      <div className="mb-4 pt-4 border-t border-gray-100">
-        <div className="flex items-center gap-2 mb-4">
-          <MapPin className="w-4 h-4 text-blue-600" />
-          <h2 className="font-bold text-gray-800 text-sm">Location</h2>
-        </div>
-        <FilterGroup title="Floor" options={facets.floors} selected={selectedFilters.floors} onChange={(val) => onFilterChange('floors', val)} icon={Layers} variant="list" />
-        <FilterGroup title="Rack Number" options={facets.racks} selected={selectedFilters.racks} onChange={(val) => onFilterChange('racks', val)} variant="grid" icon={Grid3X3} />
-      </div>
-
-      {/* Details Section */}
-      <div className="mb-4 pt-4 border-t border-gray-100">
-        <div className="flex items-center gap-2 mb-4">
-          <Book className="w-4 h-4 text-blue-600" />
-          <h2 className="font-bold text-gray-800 text-sm">Details</h2>
-        </div>
-        <FilterGroup title="Authors" options={facets.authors} selected={selectedFilters.authors} onChange={(val) => onFilterChange('authors', val)} icon={User} />
-        <FilterGroup title="Publications" options={facets.pubs} selected={selectedFilters.pubs} onChange={(val) => onFilterChange('pubs', val)} />
-      </div>
-
-      {/* --- REORDERED: Resource Type is now at the very end --- */}
-      <div className="pt-4 border-t border-gray-100">
-        <FilterGroup 
-          title="Resource Type" 
-          options={facets.accessionTypes} 
-          selected={selectedFilters.accessionTypes || []}
-          onChange={(val) => onFilterChange('accessionTypes', val)}
-          icon={Archive}
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
+          onClick={onClose}
         />
-      </div>
-    </div>
+      )}
+
+      {/* Sidebar Container */}
+      <aside className={`
+        fixed md:sticky top-0 md:top-24 left-0 h-full md:h-[calc(100vh-8rem)]
+        w-64 bg-white md:bg-transparent z-30 transform transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        border-r md:border-none border-gray-200 p-6 overflow-y-auto
+      `}>
+        
+        <div className="flex justify-between items-center mb-6 md:hidden">
+          <h2 className="text-xl font-bold text-gray-800">Filters</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Section: Floor */}
+        <div className="mb-8">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center">
+            <Filter className="w-3 h-3 mr-2" />
+            Floor Level
+          </h3>
+          <div className="space-y-2">
+            {floors.map((floor) => (
+              <label key={floor} className="flex items-center space-x-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={selectedFilters.floor === floor}
+                  onChange={() => onFilterChange('floor', selectedFilters.floor === floor ? '' : floor)}
+                  className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                />
+                <span className={`text-sm ${selectedFilters.floor === floor ? 'text-indigo-600 font-medium' : 'text-gray-600 group-hover:text-gray-900'}`}>
+                  Floor {floor}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Section: Category */}
+        <div className="mb-8">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            Top Categories
+          </h3>
+          <div className="space-y-2">
+            {categories.map((cat) => (
+              <label key={cat} className="flex items-center space-x-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={selectedFilters.category === cat}
+                  onChange={() => onFilterChange('category', selectedFilters.category === cat ? '' : cat)}
+                  className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                />
+                <span className="text-sm text-gray-600 group-hover:text-gray-900 truncate" title={cat}>
+                  {cat}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Reset Button */}
+        {(selectedFilters.floor || selectedFilters.category) && (
+          <button
+            onClick={() => {
+              onFilterChange('floor', '');
+              onFilterChange('category', '');
+            }}
+            className="w-full py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors"
+          >
+            Clear All Filters
+          </button>
+        )}
+      </aside>
+    </>
   );
 };
 

@@ -1,71 +1,49 @@
 import React from 'react';
-import { MapPin, Layers, Monitor, Disc } from 'lucide-react';
-import ResponsiveItem from './ResponsiveItem'; 
+import ResponsiveItem from './ResponsiveItem';
+import { useNavigate } from 'react-router-dom';
 
-const BookList = ({ books, onBookClick, highlightTerm, highlightEnabled }) => {
+const BookList = ({ books, loading }) => {
+  const navigate = useNavigate();
+
+  if (loading) {
+    return (
+      <div className="space-y-4 animate-pulse">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="h-24 bg-gray-100 rounded-xl w-full"></div>
+        ))}
+      </div>
+    );
+  }
+
+  if (!books || books.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-xl border border-dashed border-gray-300">
+        <div className="bg-gray-50 p-4 rounded-full mb-4">
+            <span className="text-4xl">🔍</span>
+        </div>
+        <h3 className="text-lg font-medium text-gray-900">No books found</h3>
+        <p className="text-gray-500 max-w-sm mt-2">
+          Try adjusting your search terms or clearing the filters to see more results.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3">
-      {books.map((book, index) => {
-        
-        const accType = (book.accessionType || '').toUpperCase();
-        const isEbook = accType.includes('E-BOOK');
-        const isCD = accType.includes('CD') || accType.includes('DIGITAL');
-
-        let shelfDisplay = book.location || book.shelf || "N/A";
-        let LocationIcon = MapPin;
-
-        if (isEbook) {
-            shelfDisplay = "Digital Access";
-            LocationIcon = Monitor;
-        } else if (isCD) {
-            shelfDisplay = "Digital Media";
-            LocationIcon = Disc;
-        }
-
-        let formatLabel = null;
-        if (isEbook) formatLabel = "E-Book";
-        else if (isCD) formatLabel = "CD / Digital";
-
-        const isAvailable = book.status ? book.status.toLowerCase().includes('available') : false;
-        const tags = book.tags || [];
-        const footerText = book.publisher || '';
-        const copiesCount = book.totalCopies || 1;
-        const copiesText = copiesCount === 1 ? '1 Copy' : `${copiesCount} Copies`;
-
-        return (
-          <ResponsiveItem
-            key={book._id || index}
-            onClick={() => onBookClick(book)}
-            title={book.title || 'Untitled'}
-            subtitle={book.author || 'Unknown Author'}
-            tertiary={footerText}
-            tags={tags.slice(0, 3)}
-            format={formatLabel} 
-
-            // --- PASS HIGHLIGHT DATA ---
-            highlightTerm={highlightTerm}
-            highlightEnabled={highlightEnabled}
-            matchedWords={book.matchedWords} // <--- Pass the smart matches (e.g. ['python'])
-
-            stats={[
-              { 
-                icon: Layers, 
-                value: copiesText, 
-                subLabel: 'In Library' 
-              },
-              { 
-                icon: LocationIcon, 
-                value: shelfDisplay, 
-                subLabel: 'Location' 
-              }
-            ]}
-            status={{
-              isPositive: isAvailable,
-              label: book.status || 'Unknown'
-            }}
-          />
-        );
-      })}
+    <div className="flex flex-col space-y-4 pb-20">
+      {books.map((book) => (
+        <ResponsiveItem 
+          key={book._id} 
+          data={book} 
+          // --- FIX IS HERE ---
+          // Use _id (MongoDB ID) because it is ALWAYS present.
+          // Your backend's "Strategy 2" knows how to handle this!
+          onClick={() => {
+            console.log("Navigating to book:", book._id); // Debug log for you
+            navigate(`/book/${book._id}`);
+          }} 
+        />
+      ))}
     </div>
   );
 };

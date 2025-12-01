@@ -1,62 +1,67 @@
-const Fuse = require('fuse.js');
+const fs = require('fs');
+const path = require('path');
 
-/**
- * "PROJECT-X" SMART SEARCH ENGINE (Powered by Fuse.js)
- * Handles fuzzy matching (typos), weighting, and relevance ranking.
- */
-const rankBooks = (books, search, fields, isExact) => {
-    // 1. If no search term, return empty relevance
-    if (!search) return books.map(b => ({ ...b, relevanceScore: 0, matchedWords: [] }));
+const DB_PATH = path.join(__dirname, '../../data/books_db.json');
+let MEMORY_CACHE = null;
 
-    // 2. Configure Fuse.js (The "Google-like" Brain)
-    const options = {
-        includeScore: true,
-        includeMatches: true,
-        // 0.0 = Perfect Match, 1.0 = Match Anything. 
-        // 0.3 is the "Goldilocks" zone for typos like "Practisioner" -> "Practitioner"
-        threshold: isExact ? 0.0 : 0.3, 
-        
-        // Dynamic Keys: We map your frontend "fields" to Fuse keys
-        // We give 'title' and 'author' higher weight via boosting
-        keys: fields.length > 0 ? fields : [
-            { name: 'title', weight: 0.6 },
-            { name: 'author', weight: 0.3 },
-            { name: 'tags', weight: 0.1 },
-            { name: 'publisher', weight: 0.1 },
-            { name: 'isbn', weight: 0.1 }
-        ],
-        ignoreLocation: true, // Search anywhere in the string
-        minMatchCharLength: 2,
-        useExtendedSearch: false // Set true if you want advanced query syntax like "'exact"
-    };
-
-    // 3. Initialize & Search
-    const fuse = new Fuse(books, options);
-    const results = fuse.search(search);
-
-    // 4. Process Results & Extract Highlights
-    return results.map(result => {
-        const matchedWords = new Set();
-
-        // Fuse returns match indices (e.g. [4, 9]). We extract the actual substring to highlight.
-        if (result.matches) {
-            result.matches.forEach(match => {
-                match.indices.forEach(([start, end]) => {
-                    // Extract the text that ACTUALLY matched (e.g., "Practitioner")
-                    // This allows us to highlight the correct word even if the user typed "Practisioner"
-                    const substring = match.value.substring(start, end + 1);
-                    matchedWords.add(substring);
-                });
-            });
-        }
-
-        return {
-            ...result.item,
-            // Convert Fuse score (0=Best, 1=Worst) to Relevance (100=Best, 0=Worst)
-            relevanceScore: (1 - result.score) * 100,
-            matchedWords: Array.from(matchedWords)
-        };
-    });
+const loadData = () => {
+    if (MEMORY_CACHE) return MEMORY_CACHE;
+    try {
+        if (!fs.existsSync(DB_PATH)) return [];
+        const raw = fs.readFileSync(DB_PATH, 'utf-8');
+        MEMORY_CACHE = JSON.parse(raw);
+        return MEMORY_CACHE;
+    } catch (e) {
+        console.error("Failed to load DB:", e);
+        return [];
+    }
 };
 
-module.exports = { rankBooks };
+const searchBooks = ({ query, filters = {}, page = 1, limit = 50 }) => {
+    const books = loadData();
+    const q = query ? query.toLowerCase() : '';
+
+    // 1. Filter
+    let results = books.filter(book => {
+        // --- Explicit ID Filter (New: for Direct Lookup) ---
+        if (filters.id && String(book.id) !== String(filters.id)) {
+            return false;
+        }
+
+        // --- Text Search (Updated) ---
+        // Now checks Title, Author, CallNumber, AND ID/ISBN
+        const matchesText = !q || 
+            book.title.toLowerCase().includes(q) || 
+            book.author.toLowerCase().includes(q) ||
+            book.callNumber.toLowerCase().includes(q) ||
+            String(book.id).includes(q) ||         // <--- Allow searching by ID
+            (book.isbn && book.isbn.includes(q));  // <--- Allow searching by ISBN
+
+        if (!matchesText) return false;
+
+        // Faceted Filters
+        if (filters.floor && book.floor !== filters.floor) return false;
+        if (filters.status && book.status !== filters.status) return false;
+        if (filters.category && book.category !== filters.category) return false;
+
+        return true;
+    });
+
+    // 2. Pagination
+    const total = results.length;
+    const start = (page - 1) * limit;
+    const paginated = results.slice(start, start + parseInt(limit));
+
+    // 3. Facets
+    const facets = {
+        floors: [...new Set(results.map(b => b.floor).filter(Boolean))].sort(),
+        categories: [...new Set(results.map(b => b.category).filter(Boolean))].slice(0, 20)
+    };
+
+    return {
+        data: paginated,
+        meta: { total, page: parseInt(page), totalPages: Math.ceil(total / limit), facets }
+    };
+};
+
+module.exports = { searchBooks };
