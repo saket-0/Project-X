@@ -1,26 +1,11 @@
 /**
  * server/src/controllers/bookController.js
+ * CLEAN ARCHITECTURE: Controller delegates Ranking to SearchEngine
  */
 const Book = require('../models/Book');
 const { parseShelf } = require('../utils/shelfUtils'); 
 const { groupBooksByTitle } = require('../utils/bookGrouping');
-
-// ... (Levenshtein Helper remains the same) ...
-const getLevenshteinDistance = (a, b) => {
-    const matrix = [];
-    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-    for (let i = 1; i <= b.length; i++) {
-        for (let j = 1; j <= a.length; j++) {
-            if (b.charAt(i - 1) === a.charAt(j - 1)) {
-                matrix[i][j] = matrix[i - 1][j - 1];
-            } else {
-                matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
-            }
-        }
-    }
-    return matrix[b.length][a.length];
-};
+const { rankBooks } = require('../utils/searchEngine'); // <--- IMPORT NEW ENGINE
 
 const searchBooks = async (req, res) => {
     try {
@@ -28,7 +13,7 @@ const searchBooks = async (req, res) => {
             page = 1, 
             limit = 50, 
             search = '',
-            searchFields = 'title,author,isbn', // UPDATED: Default is multi-field
+            searchFields = 'title,author', 
             exactMatch = 'false',
             availableOnly,
             authors,
@@ -36,106 +21,70 @@ const searchBooks = async (req, res) => {
             floors,
             racks,
             cols,
-            accessionTypes 
+            accessionTypes
         } = req.query;
 
-        // --- 1. BUILD BASE QUERY ---
-        let query = {};
+        // --- 1. PREPARE PARAMETERS ---
+        const targetFields = searchFields.split(',').map(f => f.trim()).filter(Boolean);
         const isExact = exactMatch === 'true';
         const cleanSearch = search.trim();
-        const searchRegex = new RegExp(cleanSearch, 'i');
         
-        // Convert "title,author" string -> ['title', 'author']
-        const targetFields = searchFields.split(',').map(f => f.trim()).filter(Boolean);
-
+        // --- 2. BUILD BROAD DATABASE QUERY ---
+        // Strategy: Fetch broadly (using Regex), then let the Engine refine & rank.
+        let query = {};
+        
         if (cleanSearch) {
-            // Construct dynamic $or array based on selected fields
+            const regex = new RegExp(cleanSearch, 'i');
             const orConditions = [];
 
-            targetFields.forEach(field => {
-                if (field === 'tags') {
-                     orConditions.push({ tags: searchRegex });
-                } else if (['title', 'author', 'publisher', 'isbn'].includes(field)) {
-                    if (isExact) {
-                        orConditions.push({ [field]: cleanSearch });
-                    } else {
-                        orConditions.push({ [field]: searchRegex });
-                    }
-                }
+            // If user wants specific fields, only search those. 
+            // Otherwise, search broad fields to ensure we don't miss candidates for the fuzzy engine.
+            const dbSearchFields = targetFields.length > 0 ? targetFields : ['title', 'author', 'isbn', 'tags'];
+
+            dbSearchFields.forEach(field => {
+                orConditions.push({ [field]: regex });
             });
 
-            // If user selects nothing, or 'all', or just fallback
-            if (orConditions.length > 0) {
-                query.$or = orConditions;
-            } else {
-                // Fallback: Search everywhere
-                query.$or = [
-                    { title: searchRegex },
-                    { author: searchRegex },
-                    { isbn: searchRegex }
-                ];
-            }
-        }
-
-        if (availableOnly === 'true') {
-            query.status = { $regex: 'available', $options: 'i' };
-        }
-
-        const toArray = (val) => val ? (Array.isArray(val) ? val : [val]) : [];
-        const filterAuthors = toArray(authors);
-        const filterPubs = toArray(pubs);
-        const filterTypes = toArray(accessionTypes);
-
-        if (filterAuthors.length > 0) query.author = { $in: filterAuthors };
-        if (filterPubs.length > 0) query.publisher = { $in: filterPubs };
-        if (filterTypes.length > 0) query.accessionType = { $in: filterTypes };
-
-        // --- 2. FETCH DATA ---
-        const allMatches = await Book.find(query)
-            .select('title author publisher status location shelf callNumber tags coverImage description accessionType isbn')
-            .lean();
-
-        // --- 3. PROCESS & RANKING ---
-        let processedBooks = allMatches.map(book => {
-            const rawLoc = book.location || book.Shelf || book.shelf || book.callNumber || 'N/A';
-            
-            // Calculate Score
-            let score = 0;
-            if (cleanSearch && !isExact) {
-                const term = cleanSearch.toLowerCase();
-                
-                // Check match across ALL selected fields to boost score
-                targetFields.forEach(field => {
-                    let targetVal = '';
-                    if (field === 'tags') targetVal = (book.tags || []).join(' ');
-                    else targetVal = (book[field] || '').toString();
-                    
-                    const target = targetVal.toLowerCase();
-
-                    if (target === term) score += 100;
-                    else if (target.startsWith(term)) score += 80;
-                    else if (target.includes(" " + term + " ")) score += 60;
-                    else if (target.includes(term)) score += 40;
-                    else if (Math.abs(target.length - term.length) < 3) {
-                         const dist = getLevenshteinDistance(target, term);
-                         if (dist <= 2) score += 30;
-                    }
+            // "Fuzzy Candidate" Strategy: 
+            // Also grab anything that *might* be a typo match (broad regex) if not in Exact Mode.
+            // This is optional but helps fetch "Pythen" when searching "Python"
+            if (!isExact) {
+                const looseRegex = new RegExp(cleanSearch.split('').join('.*'), 'i'); 
+                dbSearchFields.forEach(field => {
+                     orConditions.push({ [field]: looseRegex });
                 });
             }
 
-            return {
-                ...book,
-                parsedLocation: parseShelf(rawLoc),
-                relevanceScore: score
-            };
-        });
-
-        // SORT BY RANK
-        if (cleanSearch && !isExact) {
-            processedBooks.sort((a, b) => b.relevanceScore - a.relevanceScore);
+            if (orConditions.length > 0) query.$or = orConditions;
         }
 
-        // --- 4. FACETS ---
+        // Apply Hard Filters (Status, Location, etc.)
+        if (availableOnly === 'true') query.status = { $regex: 'available', $options: 'i' };
+        
+        const toArray = (val) => val ? (Array.isArray(val) ? val : [val]) : [];
+        if (authors) query.author = { $in: toArray(authors) };
+        if (pubs) query.publisher = { $in: toArray(pubs) };
+        if (accessionTypes) query.accessionType = { $in: toArray(accessionTypes) };
+
+        // --- 3. FETCH RAW DATA ---
+        // We lean() for performance since we are doing read-only ops
+        const rawBooks = await Book.find(query)
+            .select('title author publisher status location shelf callNumber tags coverImage description accessionType isbn')
+            .lean();
+
+        // --- 4. RANKING ENGINE (The new Module) ---
+        // The engine adds 'relevanceScore' and sorts the array
+        const rankedBooks = rankBooks(rawBooks, cleanSearch, targetFields, isExact);
+
+        // --- 5. POST-PROCESSING (Shelf Parsing & Grouping) ---
+        // We only process locations for the filtered results to save CPU
+        const processedBooks = rankedBooks.map(book => ({
+            ...book,
+            parsedLocation: parseShelf(book.location || book.shelf || book.callNumber || 'N/A')
+        }));
+
+        // --- 6. DYNAMIC FACETS ---
+        // Calculate facets based on the CURRENT ranked result set
         const facets = {
             authors: new Set(),
             pubs: new Set(),
@@ -158,34 +107,34 @@ const searchBooks = async (req, res) => {
             return true;
         };
 
-        processedBooks.forEach(b => {
-            if (isLocationMatch(b)) {
-                if (b.author) facets.authors.add(b.author);
-                if (b.publisher) facets.pubs.add(b.publisher);
-                if (b.accessionType) facets.accessionTypes.add(b.accessionType);
+        const finalFiltered = processedBooks.filter(book => {
+            const matchesLoc = isLocationMatch(book);
+            if (matchesLoc) {
+                // Populate Facets
+                if (book.author) facets.authors.add(book.author);
+                if (book.publisher) facets.pubs.add(book.publisher);
+                if (book.accessionType) facets.accessionTypes.add(book.accessionType);
+                if (book.parsedLocation && book.parsedLocation.floor !== 'Unknown') {
+                    facets.floors.add(book.parsedLocation.floor);
+                    facets.racks.add(book.parsedLocation.rack);
+                    facets.cols.add(book.parsedLocation.col);
+                }
             }
-            if (b.parsedLocation && b.parsedLocation.floor !== 'Unknown') {
-                facets.floors.add(b.parsedLocation.floor);
-                facets.racks.add(b.parsedLocation.rack);
-                facets.cols.add(b.parsedLocation.col);
-            }
+            return matchesLoc;
         });
 
-        // --- 5. FILTER ---
-        const filteredBooks = processedBooks.filter(book => isLocationMatch(book));
+        // --- 7. GROUPING ---
+        const groupedBooks = groupBooksByTitle(finalFiltered);
 
-        // --- 5.5 GROUPING ---
-        const groupedBooks = groupBooksByTitle(filteredBooks);
-
-        // --- 6. PAGINATION ---
+        // --- 8. PAGINATION ---
         const totalResults = groupedBooks.length;
-        const currentPage = parseInt(page);
         const limitNum = parseInt(limit);
+        const currentPage = parseInt(page);
         const startIndex = (currentPage - 1) * limitNum;
         
         const paginatedData = groupedBooks.slice(startIndex, startIndex + limitNum);
 
-        // --- 7. RESPONSE ---
+        // --- 9. RESPONSE ---
         res.json({
             meta: {
                 totalResults,
