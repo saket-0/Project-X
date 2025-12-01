@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { Search, BookOpen, SlidersHorizontal, ServerCrash, X } from 'lucide-react'; // Added 'X'
+import { Search, BookOpen, SlidersHorizontal, ServerCrash, X } from 'lucide-react'; 
 import BookList from './components/BookList';
 import BookDetail from './components/BookDetail';
 import FilterSidebar from './components/FilterSidebar';
-import Pagination from './components/Pagination'; // Import the new component
+import Pagination from './components/Pagination'; 
 
 // Simple Debounce Hook
 const useDebounce = (value, delay) => {
@@ -31,6 +31,9 @@ function App() {
   const [totalResults, setTotalResults] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // --- NEW: Limit State (Default 50) ---
+  const [limit, setLimit] = useState(50); 
+  
   // UI State
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [selectedBook, setSelectedBook] = useState(null);
@@ -54,7 +57,7 @@ function App() {
     try {
       const params = {
         page: page,
-        limit: 50,
+        limit: limit, // --- FIX: Use dynamic limit ---
         search: debouncedSearch,
         availableOnly: filters.availableOnly,
         authors: filters.authors,
@@ -68,24 +71,14 @@ function App() {
       
       setBooks(res.data.data || []);
       
-      // --- FIX APPLIED HERE ---
-      // We implement "Sticky Facets": If a filter category is active, we ignore 
-      // the narrowed list from the server and keep the previous full list.
       if (res.data.facets) {
           setFacets(prevFacets => {
             const nextFacets = { ...res.data.facets };
-
-            // Fix for Authors
             if (filters.authors.length > 0) nextFacets.authors = prevFacets.authors;
-            
-            // Fix for Publications (pubs)
             if (filters.pubs.length > 0) nextFacets.pubs = prevFacets.pubs;
-            
-            // Fix for Location filters (Floors, Racks, Cols)
             if (filters.floors.length > 0) nextFacets.floors = prevFacets.floors;
             if (filters.racks.length > 0) nextFacets.racks = prevFacets.racks;
             if (filters.cols.length > 0) nextFacets.cols = prevFacets.cols;
-
             return nextFacets;
           });
       }
@@ -98,12 +91,12 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, page, filters]); 
+  }, [debouncedSearch, page, filters, limit]); // --- FIX: Add limit to dependency array ---
 
   // --- EFFECTS ---
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, filters]);
+  }, [debouncedSearch, filters, limit]); // --- FIX: Reset page when limit changes ---
 
   useEffect(() => {
     fetchBooks();
@@ -128,10 +121,14 @@ function App() {
     setFilters({ availableOnly: false, authors: [], pubs: [], floors: [], racks: [], cols: [] });
   };
 
-  // New: Clear Search Handler
   const clearSearch = () => {
     setSearchTerm('');
     setPage(1);
+  };
+
+  // --- NEW: Handle Limit Change ---
+  const handleLimitChange = (e) => {
+    setLimit(Number(e.target.value));
   };
 
   return (
@@ -159,7 +156,6 @@ function App() {
                   <SlidersHorizontal className="w-5 h-5 text-gray-600" />
                 </button>
                 
-                {/* SEARCH BAR WITH CLEAR BUTTON */}
                 <div className="relative w-full md:w-96 group">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 group-focus-within:text-blue-500 transition-colors" />
                   <input 
@@ -214,7 +210,7 @@ function App() {
             </aside>
 
             <div className="flex-1 w-full min-w-0">
-              <div className="mb-6 flex justify-between items-end">
+              <div className="mb-6 flex flex-col sm:flex-row justify-between items-end gap-4">
                  <div>
                    <h2 className="text-2xl font-bold text-gray-900">Library Catalog</h2>
                    <p className="text-gray-500 text-sm mt-1">
@@ -222,6 +218,23 @@ function App() {
                      {searchTerm && ` for "${searchTerm}"`}
                    </p>
                  </div>
+
+                 {/* --- NEW: Rows Per Page Selector --- */}
+                 <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-600 font-medium whitespace-nowrap">Rows per page:</label>
+                    <select 
+                      value={limit} 
+                      onChange={handleLimitChange}
+                      className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 outline-none cursor-pointer hover:border-blue-400 transition-colors"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                 </div>
+                 {/* ----------------------------------- */}
+
               </div>
 
               {loading ? (
@@ -236,7 +249,6 @@ function App() {
                     onBookClick={setSelectedBook} 
                   />
                   
-                  {/* NEW PAGINATION COMPONENT */}
                   {books.length > 0 && (
                     <Pagination 
                       currentPage={page}
